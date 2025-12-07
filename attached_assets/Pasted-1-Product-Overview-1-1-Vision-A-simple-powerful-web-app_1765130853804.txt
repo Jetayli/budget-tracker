@@ -1,0 +1,275 @@
+1. Product Overview
+1.1 Vision
+
+A simple, powerful web app that helps marketers and finance teams track budgets, allocations, and actual spend — all the way from the total marketing budget → category → sub-platform — while showing remaining balance at each level in real time.
+
+1.2 Primary Users
+
+Marketers: to track campaign spend, allocations, and remaining budgets.
+
+Finance Teams: to verify spend accuracy and compare planned vs actual.
+
+2. Core Problems to Solve
+
+Marketing budgets are scattered across spreadsheets with manual calculations.
+
+No real-time clarity on:
+
+How much is spent
+
+How much is remaining
+
+Which channels or platforms are consuming the budget fastest
+
+Hard to compare budgeted vs actual spend accurately.
+
+3. Product Goals
+
+Provide a clear, structured hierarchy: Total → Category → Subcategory.
+
+Track actual spending and show remaining budget instantly.
+
+Replace spreadsheets with a simple web interface.
+
+Provide financial transparency to both marketing and finance teams.
+
+4. Functional Requirements
+4.1 Budget Structure
+4.1.1 Total Budget
+
+User can add a total marketing budget (e.g., 6000 SAR).
+
+User can edit or reset the total budget.
+
+System shows:
+
+Total budget
+
+Total spend
+
+Remaining budget
+
+Percentage used
+
+4.2 Categories (e.g., Social Media, Google Ads)
+User Can:
+
+Create categories
+
+Assign a category budget (e.g., Social = 2000 SAR)
+
+View category breakdown:
+
+Budget
+
+Actual spend
+
+Remaining amount
+
+Percentage used
+
+4.3 Subcategories / Platforms
+
+Inside each category, the user can create subcategories.
+
+Example:
+Category = Social
+Subcategories = X (500), Snap (1000), Insta (500)
+
+System shows for each subcategory:
+
+Budget
+
+Actual spend
+
+Remaining
+
+% Used
+
+4.4 Actual Spend Logging
+User Can:
+
+Add spend entries (date, amount, description, category, subcategory optional).
+
+Example spend entry:
+
+100 SAR / Social → X / Week 1
+
+System Automatically:
+
+Deducts spend from:
+
+Subcategory
+
+Category
+
+Total marketing budget
+
+Recalculates remaining amounts everywhere.
+
+4.5 Automatic Calculations
+For each level (Total, Category, Subcategory), the app calculates:
+A) Remaining Budget
+
+remaining = allocated – spent
+
+B) Percentage Used
+
+percentage_used = (spent / allocated) * 100
+
+C) Status Indicators
+
+Green = < 50% spent
+
+Yellow = 50–80% spent
+
+Red = > 80% spent or overspent
+
+5. Dashboard Requirements
+5.1 Overview Section
+
+Total marketing budget
+
+Total spent
+
+Remaining
+
+Progress bar
+
+5.2 Category Breakdown
+
+List view or cards:
+
+Category name
+
+Budget
+
+Spent
+
+Remaining
+
+Progress bar
+
+5.3 Subcategory (Platform) Breakdown
+
+Inside each category:
+
+Each platform with:
+
+Budget
+
+Spent
+
+Remaining
+
+5.4 Weekly & Monthly Spend Summary
+
+Total spend per week
+
+Visual chart (bar/pie optional for v2)
+
+6. Data Model
+6.1 Budget
+Budget {
+  id
+  totalBudget
+  totalSpent
+}
+
+6.2 Category
+Category {
+  id
+  name
+  allocatedBudget
+  spent
+  budgetId
+}
+
+6.3 Subcategory
+Subcategory {
+  id
+  name
+  allocatedBudget
+  spent
+  categoryId
+}
+
+6.4 Spend Entry
+SpendEntry {
+  id
+  amount
+  date
+  description
+  categoryId
+  subcategoryId (nullable)
+}
+
+7. User Stories
+7.1 Marketers
+
+I want to add the total budget so I can plan my spend.
+
+I want to divide the budget into categories and platforms.
+
+I want to log daily/weekly expenses.
+
+I want to see remaining budget at any time.
+
+I want to avoid overspending.
+
+7.2 Finance Teams
+
+I want to verify total vs actual spend.
+
+I want reports per category and subcategory.
+
+I want to ensure spending aligns with allocated budgets.
+
+8. Acceptance Criteria
+8.1 Budget Allocation
+
+User can create total budget
+
+User can add category budgets
+
+User can add subcategory budgets
+
+Values update instantly after spend entries
+
+8.2 Spend Logging
+
+Spend entry deducted from all relevant levels
+
+Remaining updates instantly
+
+No manual recalculations needed
+
+8.3 Dashboard
+
+Shows clear and correct values
+
+Real-time updates
+
+Visual indicators for budget status
+
+9. Non-Functional Requirements
+
+Simple, clean, fast UI
+
+Mobile responsive
+
+Data stored securely
+
+Night mode (optional v2)
+
+10. Future Enhancements (Not in v1)
+
+Integrations with Meta, Google Ads, Snap Ads, X Ads
+
+Receipt upload
+
+Export reports to PDF/Excel
+
+Multi-user roles (admin, viewer)
+
+Forecasting & automatic alerts
