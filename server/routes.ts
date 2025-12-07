@@ -14,21 +14,36 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  // Budget routes
-  app.get("/api/budget", async (_req, res) => {
+  // Project (Budget) routes
+  app.get("/api/projects", async (_req, res) => {
     try {
-      const budget = await storage.getBudget();
-      if (!budget) {
-        return res.json(null);
-      }
-      const totalSpent = await storage.getTotalSpent(budget.id);
-      res.json({ ...budget, totalSpent });
+      const projects = await storage.getAllBudgets();
+      const projectsWithSpent = await Promise.all(
+        projects.map(async (project) => {
+          const totalSpent = await storage.getTotalSpent(project.id);
+          return { ...project, totalSpent };
+        })
+      );
+      res.json(projectsWithSpent);
     } catch (error) {
-      res.status(500).json({ error: "Failed to get budget" });
+      res.status(500).json({ error: "Failed to get projects" });
     }
   });
 
-  app.post("/api/budget", async (req, res) => {
+  app.get("/api/projects/:id", async (req, res) => {
+    try {
+      const project = await storage.getBudget(req.params.id);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const totalSpent = await storage.getTotalSpent(project.id);
+      res.json({ ...project, totalSpent });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get project" });
+    }
+  });
+
+  app.post("/api/projects", async (req, res) => {
     try {
       const parsed = insertBudgetSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -36,28 +51,54 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.message });
       }
       
-      const existingBudget = await storage.getBudget();
-      if (existingBudget) {
-        const updated = await storage.updateBudget(existingBudget.id, parsed.data);
-        const totalSpent = await storage.getTotalSpent(existingBudget.id);
-        return res.json({ ...updated, totalSpent });
-      }
-      
-      const budget = await storage.createBudget(parsed.data);
-      res.status(201).json({ ...budget, totalSpent: 0 });
+      const project = await storage.createBudget(parsed.data);
+      res.status(201).json({ ...project, totalSpent: 0 });
     } catch (error) {
-      res.status(500).json({ error: "Failed to create/update budget" });
+      res.status(500).json({ error: "Failed to create project" });
     }
   });
 
-  // Category routes
-  app.get("/api/categories", async (_req, res) => {
+  app.patch("/api/projects/:id", async (req, res) => {
     try {
-      const budget = await storage.getBudget();
-      if (!budget) {
-        return res.json([]);
+      const existing = await storage.getBudget(req.params.id);
+      if (!existing) {
+        return res.status(404).json({ error: "Project not found" });
       }
-      const categories = await storage.getCategories(budget.id);
+
+      const parsed = insertBudgetSchema.safeParse(req.body);
+      if (!parsed.success) {
+        const error = fromZodError(parsed.error);
+        return res.status(400).json({ error: error.message });
+      }
+      
+      const project = await storage.updateBudget(req.params.id, parsed.data);
+      const totalSpent = await storage.getTotalSpent(req.params.id);
+      res.json({ ...project, totalSpent });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update project" });
+    }
+  });
+
+  app.delete("/api/projects/:id", async (req, res) => {
+    try {
+      const deleted = await storage.deleteBudget(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete project" });
+    }
+  });
+
+  // Category routes - now require projectId
+  app.get("/api/projects/:projectId/categories", async (req, res) => {
+    try {
+      const project = await storage.getBudget(req.params.projectId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const categories = await storage.getCategories(project.id);
       res.json(categories);
     } catch (error) {
       res.status(500).json({ error: "Failed to get categories" });
@@ -77,16 +118,16 @@ export async function registerRoutes(
     }
   });
 
-  app.post("/api/categories", async (req, res) => {
+  app.post("/api/projects/:projectId/categories", async (req, res) => {
     try {
-      const budget = await storage.getBudget();
-      if (!budget) {
-        return res.status(400).json({ error: "No budget set. Please set a budget first." });
+      const project = await storage.getBudget(req.params.projectId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
       }
 
       const parsed = insertCategorySchema.safeParse({
         ...req.body,
-        budgetId: budget.id
+        budgetId: project.id
       });
       if (!parsed.success) {
         const error = fromZodError(parsed.error);
@@ -216,6 +257,19 @@ export async function registerRoutes(
   });
 
   // Spend Entry routes
+  app.get("/api/projects/:projectId/spend-entries", async (req, res) => {
+    try {
+      const project = await storage.getBudget(req.params.projectId);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      const entries = await storage.getSpendEntriesByBudget(project.id);
+      res.json(entries);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get spend entries" });
+    }
+  });
+
   app.get("/api/spend-entries", async (req, res) => {
     try {
       const { categoryId, subcategoryId } = req.query;

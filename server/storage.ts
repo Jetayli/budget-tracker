@@ -18,9 +18,11 @@ import { db } from "./db";
 import { eq, sql, desc } from "drizzle-orm";
 
 export interface IStorage {
-  getBudget(): Promise<Budget | undefined>;
+  getAllBudgets(): Promise<Budget[]>;
+  getBudget(id: string): Promise<Budget | undefined>;
   createBudget(budget: InsertBudget): Promise<Budget>;
   updateBudget(id: string, budget: InsertBudget): Promise<Budget | undefined>;
+  deleteBudget(id: string): Promise<boolean>;
   
   getCategories(budgetId: string): Promise<CategoryWithSpent[]>;
   getCategory(id: string): Promise<Category | undefined>;
@@ -34,6 +36,7 @@ export interface IStorage {
   updateSubcategory(id: string, subcategory: InsertSubcategory): Promise<Subcategory | undefined>;
   deleteSubcategory(id: string): Promise<boolean>;
   
+  getSpendEntriesByBudget(budgetId: string): Promise<SpendEntry[]>;
   getSpendEntries(categoryId?: string, subcategoryId?: string): Promise<SpendEntry[]>;
   getSpendEntry(id: string): Promise<SpendEntry | undefined>;
   createSpendEntry(entry: InsertSpendEntry): Promise<SpendEntry>;
@@ -46,8 +49,12 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  async getBudget(): Promise<Budget | undefined> {
-    const [budget] = await db.select().from(budgets).limit(1);
+  async getAllBudgets(): Promise<Budget[]> {
+    return db.select().from(budgets).orderBy(desc(budgets.createdAt));
+  }
+
+  async getBudget(id: string): Promise<Budget | undefined> {
+    const [budget] = await db.select().from(budgets).where(eq(budgets.id, id));
     return budget || undefined;
   }
 
@@ -63,6 +70,15 @@ export class DatabaseStorage implements IStorage {
       .where(eq(budgets.id, id))
       .returning();
     return budget || undefined;
+  }
+
+  async deleteBudget(id: string): Promise<boolean> {
+    const cats = await db.select({ id: categories.id }).from(categories).where(eq(categories.budgetId, id));
+    for (const cat of cats) {
+      await this.deleteCategory(cat.id);
+    }
+    const result = await db.delete(budgets).where(eq(budgets.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getCategories(budgetId: string): Promise<CategoryWithSpent[]> {
@@ -154,6 +170,19 @@ export class DatabaseStorage implements IStorage {
     await db.delete(spendEntries).where(eq(spendEntries.subcategoryId, id));
     const result = await db.delete(subcategories).where(eq(subcategories.id, id));
     return (result.rowCount ?? 0) > 0;
+  }
+
+  async getSpendEntriesByBudget(budgetId: string): Promise<SpendEntry[]> {
+    const cats = await db.select({ id: categories.id }).from(categories).where(eq(categories.budgetId, budgetId));
+    if (cats.length === 0) return [];
+    
+    const categoryIds = cats.map(c => c.id);
+    const entries = await db
+      .select()
+      .from(spendEntries)
+      .orderBy(desc(spendEntries.date));
+    
+    return entries.filter(e => categoryIds.includes(e.categoryId));
   }
 
   async getSpendEntries(categoryId?: string, subcategoryId?: string): Promise<SpendEntry[]> {
