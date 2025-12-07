@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertBudgetSchema, insertExpenseSchema } from "@shared/schema";
+import { insertProjectSchema, insertExpenseSchema } from "@shared/schema";
 import { fromZodError } from "zod-validation-error";
 
 export async function registerRoutes(
@@ -9,28 +9,71 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
-  // Budget routes
-  app.get("/api/budget", async (_req, res) => {
+  // Project routes
+  app.get("/api/projects", async (_req, res) => {
     try {
-      const budget = await storage.getBudget();
-      res.json(budget);
+      const projects = await storage.getProjects();
+      res.json(projects);
     } catch (error) {
-      res.status(500).json({ error: "Failed to get budget" });
+      res.status(500).json({ error: "Failed to get projects" });
     }
   });
 
-  app.post("/api/budget", async (req, res) => {
+  app.get("/api/projects/:id", async (req, res) => {
     try {
-      const parsed = insertBudgetSchema.safeParse(req.body);
+      const project = await storage.getProject(req.params.id);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      res.json(project);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get project" });
+    }
+  });
+
+  app.post("/api/projects", async (req, res) => {
+    try {
+      const parsed = insertProjectSchema.safeParse(req.body);
       if (!parsed.success) {
         const error = fromZodError(parsed.error);
         return res.status(400).json({ error: error.message });
       }
       
-      const budget = await storage.setBudget(parsed.data);
-      res.json(budget);
+      const project = await storage.createProject(parsed.data);
+      res.status(201).json(project);
     } catch (error) {
-      res.status(500).json({ error: "Failed to set budget" });
+      res.status(500).json({ error: "Failed to create project" });
+    }
+  });
+
+  app.patch("/api/projects/:id", async (req, res) => {
+    try {
+      const parsed = insertProjectSchema.safeParse(req.body);
+      if (!parsed.success) {
+        const error = fromZodError(parsed.error);
+        return res.status(400).json({ error: error.message });
+      }
+      
+      const project = await storage.updateProject(req.params.id, parsed.data);
+      if (!project) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      res.json(project);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to update project" });
+    }
+  });
+
+  app.delete("/api/projects/:id", async (req, res) => {
+    try {
+      await storage.deleteExpensesByProject(req.params.id);
+      const deleted = await storage.deleteProject(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Project not found" });
+      }
+      res.status(204).send();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to delete project" });
     }
   });
 
@@ -38,6 +81,15 @@ export async function registerRoutes(
   app.get("/api/expenses", async (_req, res) => {
     try {
       const expenses = await storage.getExpenses();
+      res.json(expenses);
+    } catch (error) {
+      res.status(500).json({ error: "Failed to get expenses" });
+    }
+  });
+
+  app.get("/api/projects/:projectId/expenses", async (req, res) => {
+    try {
+      const expenses = await storage.getExpensesByProject(req.params.projectId);
       res.json(expenses);
     } catch (error) {
       res.status(500).json({ error: "Failed to get expenses" });
@@ -64,6 +116,11 @@ export async function registerRoutes(
         return res.status(400).json({ error: error.message });
       }
       
+      const project = await storage.getProject(parsed.data.projectId);
+      if (!project) {
+        return res.status(400).json({ error: "Project not found" });
+      }
+      
       const expense = await storage.createExpense(parsed.data);
       res.status(201).json(expense);
     } catch (error) {
@@ -77,6 +134,11 @@ export async function registerRoutes(
       if (!parsed.success) {
         const error = fromZodError(parsed.error);
         return res.status(400).json({ error: error.message });
+      }
+      
+      const project = await storage.getProject(parsed.data.projectId);
+      if (!project) {
+        return res.status(400).json({ error: "Project not found" });
       }
       
       const expense = await storage.updateExpense(req.params.id, parsed.data);

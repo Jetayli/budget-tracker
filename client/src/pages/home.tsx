@@ -5,12 +5,11 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { type Expense, type Budget, expenseCategories } from "@shared/schema";
+import { type Expense, type Project, expenseCategories } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
   Form,
   FormControl,
@@ -56,12 +55,13 @@ import {
   Wallet,
   Receipt,
   Calendar,
-  AlertTriangle,
   Search,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
-  Download
+  Download,
+  FolderOpen,
+  ChevronLeft
 } from "lucide-react";
 import { format, isWithinInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO } from "date-fns";
 
@@ -71,8 +71,9 @@ const BUDGET_THRESHOLDS = [
   { percent: 90, title: "Budget Alert: 90% Used", severity: "destructive" as const },
 ] as const;
 
-const budgetFormSchema = z.object({
-  totalAmount: z.coerce.number().min(0.01, "Budget must be greater than 0"),
+const projectFormSchema = z.object({
+  name: z.string().min(1, "Project name is required"),
+  budgetAmount: z.coerce.number().min(0.01, "Budget must be greater than 0"),
 });
 
 const expenseFormSchema = z.object({
@@ -80,6 +81,7 @@ const expenseFormSchema = z.object({
   amount: z.coerce.number().min(0.01, "Amount must be greater than 0"),
   category: z.string().min(1, "Category is required"),
   date: z.string().min(1, "Date is required"),
+  projectId: z.string().min(1, "Project is required"),
 });
 
 function getTodayDateString(): string {
@@ -201,7 +203,7 @@ function exportToCSV(expenses: Expense[]): void {
   URL.revokeObjectURL(url);
 }
 
-type BudgetFormValues = z.infer<typeof budgetFormSchema>;
+type ProjectFormValues = z.infer<typeof projectFormSchema>;
 type ExpenseFormValues = z.infer<typeof expenseFormSchema>;
 
 function formatCurrency(amount: number): string {
@@ -224,18 +226,376 @@ function getCategoryColor(category: string): string {
   return colors[category] || colors["Other"];
 }
 
+function ProjectCard({ 
+  project, 
+  totalSpent,
+  onClick,
+  onEdit,
+  onDelete
+}: { 
+  project: Project;
+  totalSpent: number;
+  onClick: () => void;
+  onEdit: (project: Project) => void;
+  onDelete: (id: string) => void;
+}) {
+  const remaining = project.budgetAmount - totalSpent;
+  const percentUsed = project.budgetAmount > 0 
+    ? (totalSpent / project.budgetAmount) * 100 
+    : 0;
+  
+  const getStatusColor = () => {
+    if (percentUsed > 75) return "text-red-600 dark:text-red-400";
+    if (percentUsed > 50) return "text-yellow-600 dark:text-yellow-400";
+    return "text-green-600 dark:text-green-400";
+  };
+
+  const getProgressColor = () => {
+    if (percentUsed > 75) return "bg-red-500";
+    if (percentUsed > 50) return "bg-yellow-500";
+    return "bg-green-500";
+  };
+
+  return (
+    <Card className="hover-elevate cursor-pointer" onClick={onClick}>
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <FolderOpen className="h-5 w-5 text-muted-foreground shrink-0" />
+            <h3 className="font-semibold truncate" data-testid={`text-project-name-${project.id}`}>
+              {project.name}
+            </h3>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button 
+              size="icon" 
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(project);
+              }}
+              data-testid={`button-edit-project-${project.id}`}
+            >
+              <Pencil className="h-4 w-4" />
+            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button 
+                  size="icon" 
+                  variant="ghost"
+                  onClick={(e) => e.stopPropagation()}
+                  data-testid={`button-delete-project-${project.id}`}
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete Project</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Are you sure you want to delete "{project.name}"? This will also delete all expenses in this project. This action cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction onClick={() => onDelete(project.id)}>
+                    Delete
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-3 gap-2 text-sm mb-3">
+          <div>
+            <p className="text-muted-foreground text-xs">Budget</p>
+            <p className="font-medium tabular-nums">{formatCurrency(project.budgetAmount)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-xs">Spent</p>
+            <p className="font-medium tabular-nums">{formatCurrency(totalSpent)}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground text-xs">Remaining</p>
+            <p className={`font-medium tabular-nums ${getStatusColor()}`}>{formatCurrency(remaining)}</p>
+          </div>
+        </div>
+        
+        <div className="space-y-1">
+          <div className="flex justify-between text-xs">
+            <span className="text-muted-foreground">Budget Used</span>
+            <span className="font-medium tabular-nums">{Math.round(percentUsed)}%</span>
+          </div>
+          <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className={`h-full transition-all duration-500 ease-out ${getProgressColor()}`}
+              style={{ width: `${Math.min(percentUsed, 100)}%` }}
+            />
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function CreateProjectDialog({ onSuccess }: { onSuccess: (project: Project) => void }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  
+  const form = useForm<ProjectFormValues>({
+    resolver: zodResolver(projectFormSchema),
+    defaultValues: {
+      name: "",
+      budgetAmount: undefined as unknown as number,
+    },
+  });
+
+  const mutation = useMutation({
+    mutationFn: async (data: ProjectFormValues) => {
+      const res = await apiRequest("POST", "/api/projects", data);
+      return res.json() as Promise<Project>;
+    },
+    onSuccess: (newProject) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({
+        title: "Project Created",
+        description: "Your new project has been created successfully.",
+      });
+      setOpen(false);
+      form.reset();
+      onSuccess(newProject);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = (data: ProjectFormValues) => {
+    mutation.mutate(data);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button data-testid="button-create-project">
+          <Plus className="h-4 w-4 mr-2" />
+          New Project
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Create New Project</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Project Name</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="e.g., Q1 Marketing Campaign"
+                      data-testid="input-project-name"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="budgetAmount"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Budget Amount ($)</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="10000.00"
+                        className="pl-9 tabular-nums"
+                        data-testid="input-project-budget"
+                        {...field}
+                      />
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button 
+                type="submit" 
+                disabled={mutation.isPending}
+                data-testid="button-save-project"
+              >
+                {mutation.isPending ? "Creating..." : "Create Project"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function EditProjectDialog({
+  project,
+  open,
+  onOpenChange,
+  onSuccess,
+}: {
+  project: Project | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSuccess: () => void;
+}) {
+  const { toast } = useToast();
+  
+  const form = useForm<ProjectFormValues>({
+    resolver: zodResolver(projectFormSchema),
+    defaultValues: {
+      name: "",
+      budgetAmount: 0,
+    },
+  });
+
+  useEffect(() => {
+    if (project && open) {
+      form.reset({
+        name: project.name,
+        budgetAmount: project.budgetAmount,
+      });
+    }
+  }, [project, open, form]);
+
+  const mutation = useMutation({
+    mutationFn: async (data: ProjectFormValues) => {
+      const res = await apiRequest("PATCH", `/api/projects/${project?.id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({
+        title: "Project Updated",
+        description: "Your project has been updated successfully.",
+      });
+      onOpenChange(false);
+      onSuccess();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const onSubmit = (data: ProjectFormValues) => {
+    mutation.mutate(data);
+  };
+
+  if (!project) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Project</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Project Name</FormLabel>
+                  <FormControl>
+                    <Input
+                      placeholder="e.g., Q1 Marketing Campaign"
+                      data-testid="input-edit-project-name"
+                      {...field}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="budgetAmount"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Budget Amount ($)</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="10000.00"
+                        className="pl-9 tabular-nums"
+                        data-testid="input-edit-project-budget"
+                        {...field}
+                      />
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">
+                  Cancel
+                </Button>
+              </DialogClose>
+              <Button 
+                type="submit" 
+                disabled={mutation.isPending}
+                data-testid="button-save-edit-project"
+              >
+                {mutation.isPending ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function BudgetOverview({ 
-  budget, 
+  project, 
   totalSpent, 
   isLoading 
 }: { 
-  budget: Budget | null; 
+  project: Project; 
   totalSpent: number;
   isLoading: boolean;
 }) {
-  const remaining = budget ? budget.totalAmount - totalSpent : 0;
-  const percentUsed = budget && budget.totalAmount > 0 
-    ? (totalSpent / budget.totalAmount) * 100 
+  const remaining = project.budgetAmount - totalSpent;
+  const percentUsed = project.budgetAmount > 0 
+    ? (totalSpent / project.budgetAmount) * 100 
     : 0;
   
   const getStatusColor = () => {
@@ -264,22 +624,6 @@ function BudgetOverview({
     );
   }
 
-  if (!budget) {
-    return (
-      <Card>
-        <CardContent className="p-6">
-          <div className="text-center py-8">
-            <Wallet className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium mb-2">No Budget Set</h3>
-            <p className="text-muted-foreground text-sm">
-              Set your total marketing budget to get started
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
     <Card>
       <CardContent className="p-6">
@@ -287,10 +631,10 @@ function BudgetOverview({
           <div className="space-y-2">
             <div className="flex items-center gap-2 text-muted-foreground text-sm font-medium">
               <Wallet className="h-4 w-4" />
-              <span>Total Budget</span>
+              <span>Project Budget</span>
             </div>
             <p className="text-2xl font-bold tabular-nums">
-              {formatCurrency(budget.totalAmount)}
+              {formatCurrency(project.budgetAmount)}
             </p>
           </div>
           
@@ -332,123 +676,12 @@ function BudgetOverview({
   );
 }
 
-function SetBudgetForm({ 
-  currentBudget, 
-  onSuccess 
-}: { 
-  currentBudget: Budget | null;
-  onSuccess: () => void;
-}) {
-  const { toast } = useToast();
-  const [open, setOpen] = useState(false);
-  
-  const form = useForm<BudgetFormValues>({
-    resolver: zodResolver(budgetFormSchema),
-    defaultValues: {
-      totalAmount: 0,
-    },
-  });
-
-  useEffect(() => {
-    if (open && currentBudget) {
-      form.reset({
-        totalAmount: currentBudget.totalAmount,
-      });
-    }
-  }, [open, currentBudget, form]);
-
-  const mutation = useMutation({
-    mutationFn: async (data: BudgetFormValues) => {
-      const res = await apiRequest("POST", "/api/budget", data);
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/budget"] });
-      toast({
-        title: "Budget Updated",
-        description: "Your marketing budget has been set successfully.",
-      });
-      setOpen(false);
-      onSuccess();
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-    },
-  });
-
-  const onSubmit = (data: BudgetFormValues) => {
-    mutation.mutate(data);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button variant="outline" data-testid="button-set-budget">
-          <DollarSign className="h-4 w-4 mr-2" />
-          {currentBudget ? "Update Budget" : "Set Budget"}
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>
-            {currentBudget ? "Update Marketing Budget" : "Set Marketing Budget"}
-          </DialogTitle>
-        </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <FormField
-              control={form.control}
-              name="totalAmount"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Total Budget Amount ($)</FormLabel>
-                  <FormControl>
-                    <div className="relative">
-                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="10000.00"
-                        className="pl-9 tabular-nums"
-                        data-testid="input-budget-amount"
-                        {...field}
-                      />
-                    </div>
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <DialogFooter>
-              <DialogClose asChild>
-                <Button type="button" variant="ghost">
-                  Cancel
-                </Button>
-              </DialogClose>
-              <Button 
-                type="submit" 
-                disabled={mutation.isPending}
-                data-testid="button-save-budget"
-              >
-                {mutation.isPending ? "Saving..." : "Save Budget"}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
 function AddExpenseForm({ 
+  projectId,
   onSuccess, 
   onCheckBudgetThresholds 
 }: { 
+  projectId: string;
   onSuccess: () => void;
   onCheckBudgetThresholds: (addedAmount: number) => void;
 }) {
@@ -461,8 +694,13 @@ function AddExpenseForm({
       amount: undefined as unknown as number,
       category: "",
       date: getTodayDateString(),
+      projectId: projectId,
     },
   });
+
+  useEffect(() => {
+    form.setValue("projectId", projectId);
+  }, [projectId, form]);
 
   const mutation = useMutation({
     mutationFn: async (data: ExpenseFormValues) => {
@@ -471,6 +709,7 @@ function AddExpenseForm({
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "expenses"] });
       toast({
         title: "Expense Added",
         description: "Your expense has been recorded successfully.",
@@ -481,6 +720,7 @@ function AddExpenseForm({
         amount: undefined as unknown as number,
         category: "",
         date: getTodayDateString(),
+        projectId: projectId,
       });
       onSuccess();
     },
@@ -694,12 +934,14 @@ function ExpenseItem({
 
 function EditExpenseDialog({
   expense,
+  projectId,
   open,
   onOpenChange,
   onSuccess,
   onCheckBudgetThresholds,
 }: {
   expense: Expense | null;
+  projectId: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
@@ -714,6 +956,7 @@ function EditExpenseDialog({
       amount: 0,
       category: "",
       date: getTodayDateString(),
+      projectId: projectId,
     },
   });
 
@@ -724,6 +967,7 @@ function EditExpenseDialog({
         amount: expense.amount,
         category: expense.category,
         date: expense.date,
+        projectId: expense.projectId,
       });
     }
   }, [expense, open, form]);
@@ -735,13 +979,16 @@ function EditExpenseDialog({
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "expenses"] });
       toast({
         title: "Expense Updated",
         description: "Your expense has been updated successfully.",
       });
-      const amountDifference = variables.amount - (expense?.amount || 0);
-      if (amountDifference > 0) {
-        onCheckBudgetThresholds(amountDifference);
+      if (expense) {
+        const amountDifference = variables.amount - expense.amount;
+        if (amountDifference > 0) {
+          onCheckBudgetThresholds(amountDifference);
+        }
       }
       onOpenChange(false);
       onSuccess();
@@ -881,14 +1128,14 @@ function EditExpenseDialog({
 }
 
 function ExpensesList({ 
+  projectId,
   expenses, 
   isLoading,
-  totalSpent,
   onCheckBudgetThresholds,
 }: { 
+  projectId: string;
   expenses: Expense[];
   isLoading: boolean;
-  totalSpent: number;
   onCheckBudgetThresholds: (amountDifference: number) => void;
 }) {
   const { toast } = useToast();
@@ -912,22 +1159,13 @@ function ExpensesList({
     }
   };
 
-  const getSortLabel = (field: SortField): string => {
-    const labels: Record<SortField, string> = {
-      date: "Date",
-      amount: "Amount",
-      category: "Category",
-      name: "Name",
-    };
-    return labels[field];
-  };
-
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
       await apiRequest("DELETE", `/api/expenses/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "expenses"] });
       toast({
         title: "Expense Deleted",
         description: "The expense has been removed.",
@@ -1109,6 +1347,7 @@ function ExpensesList({
       
       <EditExpenseDialog
         expense={editingExpense}
+        projectId={projectId}
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         onSuccess={() => setEditingExpense(null)}
@@ -1118,54 +1357,48 @@ function ExpensesList({
   );
 }
 
-export default function Home() {
+function ProjectView({
+  project,
+  onBack,
+}: {
+  project: Project;
+  onBack: () => void;
+}) {
   const { toast } = useToast();
-  const { data: budget, isLoading: budgetLoading } = useQuery<Budget | null>({
-    queryKey: ["/api/budget"],
-  });
-
+  
   const { data: expenses = [], isLoading: expensesLoading } = useQuery<Expense[]>({
-    queryKey: ["/api/expenses"],
+    queryKey: ["/api/projects", project.id, "expenses"],
+    queryFn: async () => {
+      const res = await fetch(`/api/projects/${project.id}/expenses`);
+      if (!res.ok) throw new Error("Failed to fetch expenses");
+      return res.json();
+    },
   });
 
   const totalSpent = expenses.reduce((sum, expense) => sum + expense.amount, 0);
   
-  const [shownThresholds, setShownThresholds] = useState<Record<string, Set<number>>>({});
-  const prevTotalSpentRef = useRef<number>(totalSpent);
-  const budgetIdRef = useRef<string | undefined>(budget?.id);
-
-  useEffect(() => {
-    if (budget?.id !== budgetIdRef.current) {
-      budgetIdRef.current = budget?.id;
-      if (budget?.id) {
-        setShownThresholds(prev => {
-          if (!prev[budget.id]) {
-            const currentPercent = budget.totalAmount > 0 ? (totalSpent / budget.totalAmount) * 100 : 0;
-            const passedThresholds = new Set<number>();
-            for (const threshold of BUDGET_THRESHOLDS) {
-              if (currentPercent >= threshold.percent) {
-                passedThresholds.add(threshold.percent);
-              }
-            }
-            return { ...prev, [budget.id]: passedThresholds };
-          }
-          return prev;
-        });
+  const [shownThresholds, setShownThresholds] = useState<Set<number>>(() => {
+    const currentPercent = project.budgetAmount > 0 ? (totalSpent / project.budgetAmount) * 100 : 0;
+    const passedThresholds = new Set<number>();
+    for (const threshold of BUDGET_THRESHOLDS) {
+      if (currentPercent >= threshold.percent) {
+        passedThresholds.add(threshold.percent);
       }
     }
-  }, [budget?.id, budget?.totalAmount, totalSpent]);
+    return passedThresholds;
+  });
+  
+  const prevTotalSpentRef = useRef<number>(totalSpent);
 
   useEffect(() => {
-    if (!budget || budget.totalAmount <= 0) {
+    if (project.budgetAmount <= 0) {
       prevTotalSpentRef.current = totalSpent;
       return;
     }
     
-    const budgetId = budget.id;
-    const currentThresholds = shownThresholds[budgetId] || new Set<number>();
     const prevTotal = prevTotalSpentRef.current;
-    const prevPercent = (prevTotal / budget.totalAmount) * 100;
-    const newPercent = (totalSpent / budget.totalAmount) * 100;
+    const prevPercent = (prevTotal / project.budgetAmount) * 100;
+    const newPercent = (totalSpent / project.budgetAmount) * 100;
     
     if (totalSpent > prevTotal) {
       const newlyPassedThresholds: number[] = [];
@@ -1173,15 +1406,15 @@ export default function Home() {
       for (const threshold of BUDGET_THRESHOLDS) {
         if (newPercent >= threshold.percent && 
             prevPercent < threshold.percent && 
-            !currentThresholds.has(threshold.percent)) {
+            !shownThresholds.has(threshold.percent)) {
           newlyPassedThresholds.push(threshold.percent);
           
-          const remaining = budget.totalAmount - totalSpent;
+          const remaining = project.budgetAmount - totalSpent;
           const remainingPercent = Math.round(100 - newPercent);
           
           toast({
             title: threshold.title,
-            description: `You've used ${threshold.percent}% of your marketing budget. ${formatCurrency(Math.max(0, remaining))} (${remainingPercent}%) remaining.`,
+            description: `You've used ${threshold.percent}% of the "${project.name}" budget. ${formatCurrency(Math.max(0, remaining))} (${remainingPercent}%) remaining.`,
             variant: threshold.severity === "destructive" ? "destructive" : "default",
           });
         }
@@ -1189,57 +1422,217 @@ export default function Home() {
       
       if (newlyPassedThresholds.length > 0) {
         setShownThresholds(prev => {
-          const updated = new Set(prev[budgetId] || []);
+          const updated = new Set(prev);
           for (const t of newlyPassedThresholds) {
             updated.add(t);
           }
-          return { ...prev, [budgetId]: updated };
+          return updated;
         });
       }
     }
     
     prevTotalSpentRef.current = totalSpent;
-  }, [totalSpent, budget, shownThresholds, toast]);
+  }, [totalSpent, project.budgetAmount, project.name, shownThresholds, toast]);
 
   const checkBudgetThresholds = useCallback((_addedAmount: number) => {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-4 py-8">
-        <header className="mb-8">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-semibold">Marketing Budget Tracker</h1>
-              <p className="text-muted-foreground text-sm mt-1">
-                Manage and track your marketing expenses
-              </p>
-            </div>
-            <SetBudgetForm 
-              currentBudget={budget || null} 
-              onSuccess={() => {}} 
-            />
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <Button 
+          variant="ghost" 
+          size="icon"
+          onClick={onBack}
+          data-testid="button-back-to-projects"
+        >
+          <ChevronLeft className="h-5 w-5" />
+        </Button>
+        <div>
+          <h2 className="text-xl font-semibold">{project.name}</h2>
+          <p className="text-muted-foreground text-sm">Project Budget Tracker</p>
+        </div>
+      </div>
+      
+      <BudgetOverview 
+        project={project} 
+        totalSpent={totalSpent}
+        isLoading={expensesLoading}
+      />
+      
+      <AddExpenseForm 
+        projectId={project.id}
+        onSuccess={() => {}} 
+        onCheckBudgetThresholds={checkBudgetThresholds}
+      />
+      
+      <ExpensesList 
+        projectId={project.id}
+        expenses={expenses}
+        isLoading={expensesLoading}
+        onCheckBudgetThresholds={checkBudgetThresholds}
+      />
+    </div>
+  );
+}
+
+function ProjectsList() {
+  const { toast } = useToast();
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+
+  const { data: projects = [], isLoading } = useQuery<Project[]>({
+    queryKey: ["/api/projects"],
+  });
+
+  const { data: allExpenses = [] } = useQuery<Expense[]>({
+    queryKey: ["/api/expenses"],
+  });
+
+  useEffect(() => {
+    if (selectedProject && projects.length > 0) {
+      const updatedProject = projects.find(p => p.id === selectedProject.id);
+      if (updatedProject) {
+        setSelectedProject(updatedProject);
+      } else {
+        setSelectedProject(null);
+      }
+    }
+  }, [projects, selectedProject?.id]);
+
+  const getProjectTotalSpent = (projectId: string) => {
+    return allExpenses
+      .filter(expense => expense.projectId === projectId)
+      .reduce((sum, expense) => sum + expense.amount, 0);
+  };
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/projects/${id}`);
+    },
+    onSuccess: (_data, deletedId) => {
+      if (selectedProject?.id === deletedId) {
+        setSelectedProject(null);
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      toast({
+        title: "Project Deleted",
+        description: "The project and all its expenses have been removed.",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleEdit = (project: Project) => {
+    setEditingProject(project);
+    setEditDialogOpen(true);
+  };
+
+  const handleDelete = (id: string) => {
+    deleteMutation.mutate(id);
+  };
+
+  if (selectedProject) {
+    return (
+      <ProjectView 
+        project={selectedProject} 
+        onBack={() => setSelectedProject(null)} 
+      />
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between gap-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <Skeleton key={i} className="h-48 w-full" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold">Projects</h2>
+            <p className="text-muted-foreground text-sm">
+              {projects.length === 0 
+                ? "Create your first project to start tracking expenses"
+                : `${projects.length} project${projects.length === 1 ? "" : "s"}`
+              }
+            </p>
           </div>
+          <CreateProjectDialog onSuccess={(newProject) => setSelectedProject(newProject)} />
+        </div>
+
+        {projects.length === 0 ? (
+          <Card>
+            <CardContent className="p-8">
+              <div className="text-center">
+                <FolderOpen className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+                <h3 className="text-lg font-medium mb-2">No Projects Yet</h3>
+                <p className="text-muted-foreground text-sm mb-4">
+                  Create a project to start tracking your marketing budgets and expenses
+                </p>
+                <CreateProjectDialog onSuccess={(newProject) => setSelectedProject(newProject)} />
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {projects.map((project) => (
+              <ProjectCard
+                key={project.id}
+                project={project}
+                totalSpent={getProjectTotalSpent(project.id)}
+                onClick={() => setSelectedProject(project)}
+                onEdit={handleEdit}
+                onDelete={handleDelete}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <EditProjectDialog
+        project={editingProject}
+        open={editDialogOpen}
+        onOpenChange={setEditDialogOpen}
+        onSuccess={() => setEditingProject(null)}
+      />
+    </>
+  );
+}
+
+export default function Home() {
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="max-w-6xl mx-auto px-4 py-8">
+        <header className="mb-8">
+          <h1 className="text-2xl font-semibold">Marketing Budget Tracker</h1>
+          <p className="text-muted-foreground text-sm mt-1">
+            Manage projects and track your marketing expenses
+          </p>
         </header>
 
-        <main className="space-y-6">
-          <BudgetOverview 
-            budget={budget || null} 
-            totalSpent={totalSpent}
-            isLoading={budgetLoading}
-          />
-          
-          <AddExpenseForm 
-            onSuccess={() => {}} 
-            onCheckBudgetThresholds={checkBudgetThresholds}
-          />
-          
-          <ExpensesList 
-            expenses={expenses}
-            isLoading={expensesLoading}
-            totalSpent={totalSpent}
-            onCheckBudgetThresholds={checkBudgetThresholds}
-          />
+        <main>
+          <ProjectsList />
         </main>
       </div>
     </div>

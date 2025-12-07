@@ -2,9 +2,10 @@ import { pgTable, text, varchar, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const budgets = pgTable("budgets", {
+export const projects = pgTable("projects", {
   id: varchar("id", { length: 36 }).primaryKey(),
-  totalAmount: real("total_amount").notNull(),
+  name: text("name").notNull(),
+  budgetAmount: real("budget_amount").notNull(),
 });
 
 export const expenses = pgTable("expenses", {
@@ -13,13 +14,14 @@ export const expenses = pgTable("expenses", {
   amount: real("amount").notNull(),
   category: text("category").notNull(),
   date: text("date").notNull(),
+  projectId: varchar("project_id", { length: 36 }).notNull(),
 });
 
-export const insertBudgetSchema = createInsertSchema(budgets).omit({ id: true });
+export const insertProjectSchema = createInsertSchema(projects).omit({ id: true });
 export const insertExpenseSchema = createInsertSchema(expenses).omit({ id: true });
 
-export type InsertBudget = z.infer<typeof insertBudgetSchema>;
-export type Budget = typeof budgets.$inferSelect;
+export type InsertProject = z.infer<typeof insertProjectSchema>;
+export type Project = typeof projects.$inferSelect;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 export type Expense = typeof expenses.$inferSelect;
 
