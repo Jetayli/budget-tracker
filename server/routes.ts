@@ -187,6 +187,29 @@ export async function registerRoutes(
     }
   });
 
+  app.post("/api/categories/:categoryId/subcategories", async (req, res) => {
+    try {
+      const category = await storage.getCategory(req.params.categoryId);
+      if (!category) {
+        return res.status(404).json({ error: "Category not found" });
+      }
+
+      const parsed = insertSubcategorySchema.safeParse({
+        ...req.body,
+        categoryId: req.params.categoryId
+      });
+      if (!parsed.success) {
+        const error = fromZodError(parsed.error);
+        return res.status(400).json({ error: error.message });
+      }
+      
+      const subcategory = await storage.createSubcategory(parsed.data);
+      res.status(201).json({ ...subcategory, spent: 0 });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create subcategory" });
+    }
+  });
+
   app.get("/api/subcategories/:id", async (req, res) => {
     try {
       const subcategory = await storage.getSubcategory(req.params.id);
