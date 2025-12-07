@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -55,9 +55,16 @@ import {
   TrendingDown,
   Wallet,
   Receipt,
-  Calendar
+  Calendar,
+  AlertTriangle
 } from "lucide-react";
 import { format, isWithinInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO } from "date-fns";
+
+const BUDGET_THRESHOLDS = [
+  { percent: 50, title: "Budget Alert: 50% Used", severity: "warning" as const },
+  { percent: 75, title: "Budget Alert: 75% Used", severity: "warning" as const },
+  { percent: 90, title: "Budget Alert: 90% Used", severity: "destructive" as const },
+] as const;
 
 const budgetFormSchema = z.object({
   totalAmount: z.coerce.number().min(0.01, "Budget must be greater than 0"),
@@ -362,7 +369,13 @@ function SetBudgetForm({
   );
 }
 
-function AddExpenseForm({ onSuccess }: { onSuccess: () => void }) {
+function AddExpenseForm({ 
+  onSuccess, 
+  onCheckBudgetThresholds 
+}: { 
+  onSuccess: () => void;
+  onCheckBudgetThresholds: (addedAmount: number) => void;
+}) {
   const { toast } = useToast();
   
   const form = useForm<ExpenseFormValues>({
@@ -380,12 +393,13 @@ function AddExpenseForm({ onSuccess }: { onSuccess: () => void }) {
       const res = await apiRequest("POST", "/api/expenses", data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
       toast({
         title: "Expense Added",
         description: "Your expense has been recorded successfully.",
       });
+      onCheckBudgetThresholds(variables.amount);
       form.reset({
         name: "",
         amount: undefined as unknown as number,
@@ -607,11 +621,13 @@ function EditExpenseDialog({
   open,
   onOpenChange,
   onSuccess,
+  onCheckBudgetThresholds,
 }: {
   expense: Expense | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess: () => void;
+  onCheckBudgetThresholds: (amountDifference: number) => void;
 }) {
   const { toast } = useToast();
   
@@ -641,12 +657,16 @@ function EditExpenseDialog({
       const res = await apiRequest("PATCH", `/api/expenses/${expense?.id}`, data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
       toast({
         title: "Expense Updated",
         description: "Your expense has been updated successfully.",
       });
+      const amountDifference = variables.amount - (expense?.amount || 0);
+      if (amountDifference > 0) {
+        onCheckBudgetThresholds(amountDifference);
+      }
       onOpenChange(false);
       onSuccess();
     },
@@ -787,11 +807,13 @@ function EditExpenseDialog({
 function ExpensesList({ 
   expenses, 
   isLoading,
-  totalSpent 
+  totalSpent,
+  onCheckBudgetThresholds,
 }: { 
   expenses: Expense[];
   isLoading: boolean;
   totalSpent: number;
+  onCheckBudgetThresholds: (amountDifference: number) => void;
 }) {
   const { toast } = useToast();
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
@@ -932,12 +954,14 @@ function ExpensesList({
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
         onSuccess={() => setEditingExpense(null)}
+        onCheckBudgetThresholds={onCheckBudgetThresholds}
       />
     </>
   );
 }
 
 export default function Home() {
+  const { toast } = useToast();
   const { data: budget, isLoading: budgetLoading } = useQuery<Budget | null>({
     queryKey: ["/api/budget"],
   });
@@ -947,6 +971,80 @@ export default function Home() {
   });
 
   const totalSpent = expenses.reduce((sum, expense) => sum + expense.amount, 0);
+  
+  const [shownThresholds, setShownThresholds] = useState<Record<string, Set<number>>>({});
+  const prevTotalSpentRef = useRef<number>(totalSpent);
+  const budgetIdRef = useRef<string | undefined>(budget?.id);
+
+  useEffect(() => {
+    if (budget?.id !== budgetIdRef.current) {
+      budgetIdRef.current = budget?.id;
+      if (budget?.id) {
+        setShownThresholds(prev => {
+          if (!prev[budget.id]) {
+            const currentPercent = budget.totalAmount > 0 ? (totalSpent / budget.totalAmount) * 100 : 0;
+            const passedThresholds = new Set<number>();
+            for (const threshold of BUDGET_THRESHOLDS) {
+              if (currentPercent >= threshold.percent) {
+                passedThresholds.add(threshold.percent);
+              }
+            }
+            return { ...prev, [budget.id]: passedThresholds };
+          }
+          return prev;
+        });
+      }
+    }
+  }, [budget?.id, budget?.totalAmount, totalSpent]);
+
+  useEffect(() => {
+    if (!budget || budget.totalAmount <= 0) {
+      prevTotalSpentRef.current = totalSpent;
+      return;
+    }
+    
+    const budgetId = budget.id;
+    const currentThresholds = shownThresholds[budgetId] || new Set<number>();
+    const prevTotal = prevTotalSpentRef.current;
+    const prevPercent = (prevTotal / budget.totalAmount) * 100;
+    const newPercent = (totalSpent / budget.totalAmount) * 100;
+    
+    if (totalSpent > prevTotal) {
+      const newlyPassedThresholds: number[] = [];
+      
+      for (const threshold of BUDGET_THRESHOLDS) {
+        if (newPercent >= threshold.percent && 
+            prevPercent < threshold.percent && 
+            !currentThresholds.has(threshold.percent)) {
+          newlyPassedThresholds.push(threshold.percent);
+          
+          const remaining = budget.totalAmount - totalSpent;
+          const remainingPercent = Math.round(100 - newPercent);
+          
+          toast({
+            title: threshold.title,
+            description: `You've used ${threshold.percent}% of your marketing budget. ${formatCurrency(Math.max(0, remaining))} (${remainingPercent}%) remaining.`,
+            variant: threshold.severity === "destructive" ? "destructive" : "default",
+          });
+        }
+      }
+      
+      if (newlyPassedThresholds.length > 0) {
+        setShownThresholds(prev => {
+          const updated = new Set(prev[budgetId] || []);
+          for (const t of newlyPassedThresholds) {
+            updated.add(t);
+          }
+          return { ...prev, [budgetId]: updated };
+        });
+      }
+    }
+    
+    prevTotalSpentRef.current = totalSpent;
+  }, [totalSpent, budget, shownThresholds, toast]);
+
+  const checkBudgetThresholds = useCallback((_addedAmount: number) => {
+  }, []);
 
   return (
     <div className="min-h-screen bg-background">
@@ -973,12 +1071,16 @@ export default function Home() {
             isLoading={budgetLoading}
           />
           
-          <AddExpenseForm onSuccess={() => {}} />
+          <AddExpenseForm 
+            onSuccess={() => {}} 
+            onCheckBudgetThresholds={checkBudgetThresholds}
+          />
           
           <ExpensesList 
             expenses={expenses}
             isLoading={expensesLoading}
             totalSpent={totalSpent}
+            onCheckBudgetThresholds={checkBudgetThresholds}
           />
         </main>
       </div>
