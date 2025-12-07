@@ -54,8 +54,10 @@ import {
   Trash2, 
   TrendingDown,
   Wallet,
-  Receipt
+  Receipt,
+  Calendar
 } from "lucide-react";
+import { format, isWithinInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO } from "date-fns";
 
 const budgetFormSchema = z.object({
   totalAmount: z.coerce.number().min(0.01, "Budget must be greater than 0"),
@@ -65,7 +67,56 @@ const expenseFormSchema = z.object({
   name: z.string().min(1, "Expense name is required"),
   amount: z.coerce.number().min(0.01, "Amount must be greater than 0"),
   category: z.string().min(1, "Category is required"),
+  date: z.string().min(1, "Date is required"),
 });
+
+function getTodayDateString(): string {
+  return format(new Date(), "yyyy-MM-dd");
+}
+
+function formatDisplayDate(dateString: string): string {
+  try {
+    return format(parseISO(dateString), "MMM d, yyyy");
+  } catch {
+    return dateString;
+  }
+}
+
+type DateFilter = "all" | "week" | "month";
+
+function filterExpensesByDate(expenses: Expense[], filter: DateFilter): Expense[] {
+  if (filter === "all") return expenses;
+  
+  const today = new Date();
+  
+  if (filter === "week") {
+    const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+    const weekEnd = endOfWeek(today, { weekStartsOn: 1 });
+    return expenses.filter(expense => {
+      try {
+        const expenseDate = parseISO(expense.date);
+        return isWithinInterval(expenseDate, { start: weekStart, end: weekEnd });
+      } catch {
+        return false;
+      }
+    });
+  }
+  
+  if (filter === "month") {
+    const monthStart = startOfMonth(today);
+    const monthEnd = endOfMonth(today);
+    return expenses.filter(expense => {
+      try {
+        const expenseDate = parseISO(expense.date);
+        return isWithinInterval(expenseDate, { start: monthStart, end: monthEnd });
+      } catch {
+        return false;
+      }
+    });
+  }
+  
+  return expenses;
+}
 
 type BudgetFormValues = z.infer<typeof budgetFormSchema>;
 type ExpenseFormValues = z.infer<typeof expenseFormSchema>;
@@ -320,6 +371,7 @@ function AddExpenseForm({ onSuccess }: { onSuccess: () => void }) {
       name: "",
       amount: undefined as unknown as number,
       category: "",
+      date: getTodayDateString(),
     },
   });
 
@@ -338,6 +390,7 @@ function AddExpenseForm({ onSuccess }: { onSuccess: () => void }) {
         name: "",
         amount: undefined as unknown as number,
         category: "",
+        date: getTodayDateString(),
       });
       onSuccess();
     },
@@ -365,7 +418,7 @@ function AddExpenseForm({ onSuccess }: { onSuccess: () => void }) {
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <FormField
                 control={form.control}
                 name="name"
@@ -433,6 +486,28 @@ function AddExpenseForm({ onSuccess }: { onSuccess: () => void }) {
                   </FormItem>
                 )}
               />
+              
+              <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Date</FormLabel>
+                    <FormControl>
+                      <div className="relative">
+                        <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          type="date"
+                          className="pl-9"
+                          data-testid="input-expense-date"
+                          {...field}
+                        />
+                      </div>
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
             </div>
             
             <div className="flex justify-end">
@@ -473,6 +548,9 @@ function ExpenseItem({
         <div className="min-w-0 flex-1">
           <p className="font-medium truncate" data-testid={`text-expense-name-${expense.id}`}>
             {expense.name}
+          </p>
+          <p className="text-sm text-muted-foreground" data-testid={`text-expense-date-${expense.id}`}>
+            {formatDisplayDate(expense.date)}
           </p>
         </div>
         <Badge 
@@ -543,6 +621,7 @@ function EditExpenseDialog({
       name: "",
       amount: 0,
       category: "",
+      date: getTodayDateString(),
     },
   });
 
@@ -552,6 +631,7 @@ function EditExpenseDialog({
         name: expense.name,
         amount: expense.amount,
         category: expense.category,
+        date: expense.date,
       });
     }
   }, [expense, open, form]);
@@ -661,6 +741,28 @@ function EditExpenseDialog({
               )}
             />
             
+            <FormField
+              control={form.control}
+              name="date"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Date</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        type="date"
+                        className="pl-9"
+                        data-testid="input-edit-expense-date"
+                        {...field}
+                      />
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            
             <DialogFooter>
               <DialogClose asChild>
                 <Button type="button" variant="ghost">
@@ -694,6 +796,10 @@ function ExpensesList({
   const { toast } = useToast();
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+
+  const filteredExpenses = filterExpensesByDate(expenses, dateFilter);
+  const filteredTotal = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -748,23 +854,59 @@ function ExpensesList({
     <>
       <Card>
         <CardHeader className="pb-4">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Receipt className="h-5 w-5" />
-            Expenses ({expenses.length})
-          </CardTitle>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <CardTitle className="text-lg flex items-center gap-2">
+              <Receipt className="h-5 w-5" />
+              Expenses ({filteredExpenses.length})
+            </CardTitle>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={dateFilter === "all" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDateFilter("all")}
+                data-testid="button-filter-all"
+                className="toggle-elevate"
+              >
+                All Time
+              </Button>
+              <Button
+                variant={dateFilter === "month" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDateFilter("month")}
+                data-testid="button-filter-month"
+                className="toggle-elevate"
+              >
+                This Month
+              </Button>
+              <Button
+                variant={dateFilter === "week" ? "default" : "outline"}
+                size="sm"
+                onClick={() => setDateFilter("week")}
+                data-testid="button-filter-week"
+                className="toggle-elevate"
+              >
+                This Week
+              </Button>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
-          {expenses.length === 0 ? (
+          {filteredExpenses.length === 0 ? (
             <div className="text-center py-8">
               <Receipt className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
-              <h3 className="text-lg font-medium mb-2">No Expenses Yet</h3>
+              <h3 className="text-lg font-medium mb-2">
+                {expenses.length === 0 ? "No Expenses Yet" : "No Expenses in This Period"}
+              </h3>
               <p className="text-muted-foreground text-sm">
-                Add your first expense to start tracking your marketing spend
+                {expenses.length === 0 
+                  ? "Add your first expense to start tracking your marketing spend"
+                  : "Try selecting a different time period to view expenses"
+                }
               </p>
             </div>
           ) : (
             <div className="space-y-1">
-              {expenses.map((expense) => (
+              {filteredExpenses.map((expense) => (
                 <ExpenseItem
                   key={expense.id}
                   expense={expense}
@@ -773,9 +915,11 @@ function ExpensesList({
                 />
               ))}
               <div className="flex items-center justify-between py-3 px-4 mt-4 border-t">
-                <span className="font-semibold">Total Spent</span>
+                <span className="font-semibold">
+                  {dateFilter === "all" ? "Total Spent" : "Period Total"}
+                </span>
                 <span className="font-bold text-lg tabular-nums" data-testid="text-total-spent">
-                  {formatCurrency(totalSpent)}
+                  {formatCurrency(filteredTotal)}
                 </span>
               </div>
             </div>

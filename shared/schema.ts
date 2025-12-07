@@ -12,6 +12,7 @@ export const expenses = pgTable("expenses", {
   name: text("name").notNull(),
   amount: real("amount").notNull(),
   category: text("category").notNull(),
+  date: text("date").notNull(),
 });
 
 export const insertBudgetSchema = createInsertSchema(budgets).omit({ id: true });
