@@ -1,0 +1,134 @@
+{
+  "common": {
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "save": "Save",
+    "add": "Add",
+    "edit": "Edit",
+    "creating": "Creating...",
+    "saving": "Saving...",
+    "adding": "Adding...",
+    "deleting": "Deleting...",
+    "error": "Error",
+    "back": "Back"
+  },
+  "currency": {
+    "sar": "SAR"
+  },
+  "status": {
+    "over80": "Over 80%",
+    "between50and80": "50-80%",
+    "under50": "Under 50%"
+  },
+  "home": {
+    "title": "Marketing Budget Tracker",
+    "subtitle": "Track your marketing budgets and expenses across multiple projects.",
+    "newProject": "New Project",
+    "noProjects": "No projects yet",
+    "createFirst": "Create your first project to start tracking your marketing budget."
+  },
+  "project": {
+    "budget": "Budget",
+    "spent": "Spent",
+    "remaining": "Remaining",
+    "budgetUsed": "Budget Used",
+    "totalBudget": "Total Budget",
+    "totalSpent": "Total Spent",
+    "untitled": "Untitled Project",
+    "projectBudget": "Project Budget"
+  },
+  "projectForm": {
+    "createTitle": "Create New Project",
+    "editTitle": "Edit Project",
+    "projectName": "Project Name",
+    "projectNamePlaceholder": "e.g., Q1 Marketing Campaign",
+    "totalBudget": "Total Budget (SAR)",
+    "budgetPlaceholder": "6000",
+    "createButton": "Create Project",
+    "updateButton": "Update Project",
+    "projectNameRequired": "Project name is required",
+    "budgetRequired": "Budget must be greater than 0"
+  },
+  "projectDelete": {
+    "title": "Delete Project",
+    "description": "Are you sure you want to delete \"{{name}}\"? This will permanently delete all categories, subcategories, and spend entries associated with this project."
+  },
+  "toast": {
+    "projectCreated": "Project Created",
+    "projectCreatedDesc": "Your new project has been created.",
+    "projectUpdated": "Project Updated",
+    "projectUpdatedDesc": "Your project has been updated.",
+    "projectDeleted": "Project Deleted",
+    "projectDeletedDesc": "Project and all its data have been removed.",
+    "categoryAdded": "Category Added",
+    "categoryAddedDesc": "Your category has been created.",
+    "categoryUpdated": "Category Updated",
+    "categoryUpdatedDesc": "Your category has been updated.",
+    "categoryDeleted": "Category Deleted",
+    "categoryDeletedDesc": "Category and all its data have been removed.",
+    "platformAdded": "Platform Added",
+    "platformAddedDesc": "Your platform has been created.",
+    "platformUpdated": "Platform Updated",
+    "platformUpdatedDesc": "Your platform has been updated.",
+    "platformDeleted": "Platform Deleted",
+    "platformDeletedDesc": "Platform and all its data have been removed.",
+    "spendAdded": "Spend Entry Added",
+    "spendAddedDesc": "Your spend entry has been recorded.",
+    "spendUpdated": "Spend Entry Updated",
+    "spendUpdatedDesc": "Your spend entry has been updated.",
+    "spendDeleted": "Spend Entry Deleted",
+    "spendDeletedDesc": "Spend entry has been removed."
+  },
+  "category": {
+    "addCategory": "Add Category",
+    "editCategory": "Edit Category",
+    "deleteCategory": "Delete Category",
+    "categoryName": "Category Name",
+    "categoryNamePlaceholder": "e.g., Social Media, Google Ads",
+    "allocatedBudget": "Allocated Budget (SAR)",
+    "budgetPlaceholder": "2000",
+    "noCategories": "No categories yet",
+    "createFirstCategory": "Add your first category to organize your budget.",
+    "deleteConfirm": "Are you sure you want to delete \"{{name}}\"? This will permanently delete all platforms and spend entries in this category."
+  },
+  "platform": {
+    "addPlatform": "Add Platform",
+    "addPlatformTo": "Add Platform to {{name}}",
+    "editPlatform": "Edit Platform",
+    "deletePlatform": "Delete Platform",
+    "platformName": "Platform Name",
+    "platformNamePlaceholder": "e.g., Instagram, Facebook, TikTok",
+    "allocatedBudget": "Allocated Budget (SAR)",
+    "budgetPlaceholder": "500",
+    "platforms": "Platforms",
+    "deleteConfirm": "Are you sure you want to delete \"{{name}}\"? This will permanently delete all spend entries for this platform."
+  },
+  "spend": {
+    "addSpend": "Add Spend Entry",
+    "editSpend": "Edit Spend Entry",
+    "deleteSpend": "Delete Spend Entry",
+    "amount": "Amount (SAR)",
+    "amountPlaceholder": "100",
+    "description": "Description",
+    "descriptionPlaceholder": "e.g., Ad campaign for product launch",
+    "date": "Date",
+    "selectCategory": "Select a category",
+    "selectPlatform": "Select a platform (optional)",
+    "noPlatform": "No platform",
+    "recentSpendEntries": "Recent Spend Entries",
+    "noSpendEntries": "No spend entries yet",
+    "addFirstSpend": "Add your first spend entry to start tracking expenses.",
+    "deleteConfirm": "Are you sure you want to delete this spend entry?"
+  },
+  "navigation": {
+    "backToProjects": "Back to Projects"
+  },
+  "sections": {
+    "categories": "Categories",
+    "spendEntries": "Spend Entries"
+  },
+  "language": {
+    "switchToArabic": "Switch to Arabic",
+    "switchToEnglish": "Switch to English"
+  }
+}

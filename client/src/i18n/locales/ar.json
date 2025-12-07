@@ -1,0 +1,134 @@
+{
+  "common": {
+    "cancel": "إلغاء",
+    "delete": "حذف",
+    "save": "حفظ",
+    "add": "إضافة",
+    "edit": "تعديل",
+    "creating": "جاري الإنشاء...",
+    "saving": "جاري الحفظ...",
+    "adding": "جاري الإضافة...",
+    "deleting": "جاري الحذف...",
+    "error": "خطأ",
+    "back": "رجوع"
+  },
+  "currency": {
+    "sar": "ر.س"
+  },
+  "status": {
+    "over80": "أكثر من 80%",
+    "between50and80": "50-80%",
+    "under50": "أقل من 50%"
+  },
+  "home": {
+    "title": "متتبع ميزانية التسويق",
+    "subtitle": "تتبع ميزانيات التسويق والمصروفات عبر مشاريع متعددة.",
+    "newProject": "مشروع جديد",
+    "noProjects": "لا توجد مشاريع بعد",
+    "createFirst": "أنشئ مشروعك الأول لبدء تتبع ميزانية التسويق."
+  },
+  "project": {
+    "budget": "الميزانية",
+    "spent": "المصروف",
+    "remaining": "المتبقي",
+    "budgetUsed": "الميزانية المستخدمة",
+    "totalBudget": "إجمالي الميزانية",
+    "totalSpent": "إجمالي المصروف",
+    "untitled": "مشروع بدون عنوان",
+    "projectBudget": "ميزانية المشروع"
+  },
+  "projectForm": {
+    "createTitle": "إنشاء مشروع جديد",
+    "editTitle": "تعديل المشروع",
+    "projectName": "اسم المشروع",
+    "projectNamePlaceholder": "مثال: حملة التسويق للربع الأول",
+    "totalBudget": "إجمالي الميزانية (ر.س)",
+    "budgetPlaceholder": "6000",
+    "createButton": "إنشاء المشروع",
+    "updateButton": "تحديث المشروع",
+    "projectNameRequired": "اسم المشروع مطلوب",
+    "budgetRequired": "يجب أن تكون الميزانية أكبر من 0"
+  },
+  "projectDelete": {
+    "title": "حذف المشروع",
+    "description": "هل أنت متأكد من حذف \"{{name}}\"؟ سيتم حذف جميع الفئات والمنصات وإدخالات الإنفاق المرتبطة بهذا المشروع نهائياً."
+  },
+  "toast": {
+    "projectCreated": "تم إنشاء المشروع",
+    "projectCreatedDesc": "تم إنشاء مشروعك الجديد.",
+    "projectUpdated": "تم تحديث المشروع",
+    "projectUpdatedDesc": "تم تحديث مشروعك.",
+    "projectDeleted": "تم حذف المشروع",
+    "projectDeletedDesc": "تم حذف المشروع وجميع بياناته.",
+    "categoryAdded": "تمت إضافة الفئة",
+    "categoryAddedDesc": "تم إنشاء الفئة.",
+    "categoryUpdated": "تم تحديث الفئة",
+    "categoryUpdatedDesc": "تم تحديث الفئة.",
+    "categoryDeleted": "تم حذف الفئة",
+    "categoryDeletedDesc": "تم حذف الفئة وجميع بياناتها.",
+    "platformAdded": "تمت إضافة المنصة",
+    "platformAddedDesc": "تم إنشاء المنصة.",
+    "platformUpdated": "تم تحديث المنصة",
+    "platformUpdatedDesc": "تم تحديث المنصة.",
+    "platformDeleted": "تم حذف المنصة",
+    "platformDeletedDesc": "تم حذف المنصة وجميع بياناتها.",
+    "spendAdded": "تمت إضافة إدخال الإنفاق",
+    "spendAddedDesc": "تم تسجيل إدخال الإنفاق.",
+    "spendUpdated": "تم تحديث إدخال الإنفاق",
+    "spendUpdatedDesc": "تم تحديث إدخال الإنفاق.",
+    "spendDeleted": "تم حذف إدخال الإنفاق",
+    "spendDeletedDesc": "تم حذف إدخال الإنفاق."
+  },
+  "category": {
+    "addCategory": "إضافة فئة",
+    "editCategory": "تعديل الفئة",
+    "deleteCategory": "حذف الفئة",
+    "categoryName": "اسم الفئة",
+    "categoryNamePlaceholder": "مثال: وسائل التواصل، إعلانات جوجل",
+    "allocatedBudget": "الميزانية المخصصة (ر.س)",
+    "budgetPlaceholder": "2000",
+    "noCategories": "لا توجد فئات بعد",
+    "createFirstCategory": "أضف فئتك الأولى لتنظيم ميزانيتك.",
+    "deleteConfirm": "هل أنت متأكد من حذف \"{{name}}\"؟ سيتم حذف جميع المنصات وإدخالات الإنفاق في هذه الفئة نهائياً."
+  },
+  "platform": {
+    "addPlatform": "إضافة منصة",
+    "addPlatformTo": "إضافة منصة إلى {{name}}",
+    "editPlatform": "تعديل المنصة",
+    "deletePlatform": "حذف المنصة",
+    "platformName": "اسم المنصة",
+    "platformNamePlaceholder": "مثال: انستجرام، فيسبوك، تيك توك",
+    "allocatedBudget": "الميزانية المخصصة (ر.س)",
+    "budgetPlaceholder": "500",
+    "platforms": "المنصات",
+    "deleteConfirm": "هل أنت متأكد من حذف \"{{name}}\"؟ سيتم حذف جميع إدخالات الإنفاق لهذه المنصة نهائياً."
+  },
+  "spend": {
+    "addSpend": "إضافة إدخال إنفاق",
+    "editSpend": "تعديل إدخال الإنفاق",
+    "deleteSpend": "حذف إدخال الإنفاق",
+    "amount": "المبلغ (ر.س)",
+    "amountPlaceholder": "100",
+    "description": "الوصف",
+    "descriptionPlaceholder": "مثال: حملة إعلانية لإطلاق منتج",
+    "date": "التاريخ",
+    "selectCategory": "اختر فئة",
+    "selectPlatform": "اختر منصة (اختياري)",
+    "noPlatform": "بدون منصة",
+    "recentSpendEntries": "إدخالات الإنفاق الأخيرة",
+    "noSpendEntries": "لا توجد إدخالات إنفاق بعد",
+    "addFirstSpend": "أضف أول إدخال إنفاق لبدء تتبع المصروفات.",
+    "deleteConfirm": "هل أنت متأكد من حذف إدخال الإنفاق هذا؟"
+  },
+  "navigation": {
+    "backToProjects": "العودة للمشاريع"
+  },
+  "sections": {
+    "categories": "الفئات",
+    "spendEntries": "إدخالات الإنفاق"
+  },
+  "language": {
+    "switchToArabic": "التحويل للعربية",
+    "switchToEnglish": "التحويل للإنجليزية"
+  }
+}

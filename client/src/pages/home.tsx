@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useLocation } from "wouter";
+import { useTranslation } from "react-i18next";
 import { type Budget } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LanguageToggle } from "@/components/language-toggle";
 import { 
   DollarSign, 
   Trash2, 
@@ -51,15 +53,9 @@ import {
 
 type ProjectWithSpent = Budget & { totalSpent: number };
 
-const projectFormSchema = z.object({
-  name: z.string().min(1, "Project name is required"),
-  totalBudget: z.coerce.number().min(0.01, "Budget must be greater than 0"),
-});
-
-type ProjectFormValues = z.infer<typeof projectFormSchema>;
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-SA", {
+function formatCurrency(amount: number, language: string): string {
+  const locale = language === 'ar' ? 'ar-SA' : 'en-SA';
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "SAR",
     minimumFractionDigits: 0,
@@ -79,20 +75,30 @@ function getProgressColor(percentUsed: number): string {
   return "bg-green-500";
 }
 
-function getStatusBadge(percentUsed: number) {
+function StatusBadge({ percentUsed }: { percentUsed: number }) {
+  const { t } = useTranslation();
+  
   if (percentUsed >= 80) {
-    return <Badge variant="destructive" className="text-xs">Over 80%</Badge>;
+    return <Badge variant="destructive" className="text-xs">{t('status.over80')}</Badge>;
   }
   if (percentUsed >= 50) {
-    return <Badge className="bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border-yellow-500/30 text-xs">50-80%</Badge>;
+    return <Badge className="bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border-yellow-500/30 text-xs">{t('status.between50and80')}</Badge>;
   }
-  return <Badge className="bg-green-500/20 text-green-700 dark:text-green-300 border-green-500/30 text-xs">Under 50%</Badge>;
+  return <Badge className="bg-green-500/20 text-green-700 dark:text-green-300 border-green-500/30 text-xs">{t('status.under50')}</Badge>;
 }
 
 function CreateProjectDialog() {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const [, navigate] = useLocation();
   const [open, setOpen] = useState(false);
+  
+  const projectFormSchema = z.object({
+    name: z.string().min(1, t('projectForm.projectNameRequired')),
+    totalBudget: z.coerce.number().min(0.01, t('projectForm.budgetRequired')),
+  });
+
+  type ProjectFormValues = z.infer<typeof projectFormSchema>;
   
   const form = useForm<ProjectFormValues>({
     resolver: zodResolver(projectFormSchema),
@@ -109,27 +115,29 @@ function CreateProjectDialog() {
     },
     onSuccess: (data: ProjectWithSpent) => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      toast({ title: "Project Created", description: "Your new project has been created." });
+      toast({ title: t('toast.projectCreated'), description: t('toast.projectCreatedDesc') });
       setOpen(false);
       form.reset();
       navigate(`/projects/${data.id}`);
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t('common.error'), description: error.message, variant: "destructive" });
     },
   });
+
+  const isRTL = i18n.language === 'ar';
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button data-testid="button-create-project">
-          <FolderPlus className="h-4 w-4 mr-2" />
-          New Project
+          <FolderPlus className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+          {t('home.newProject')}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Create New Project</DialogTitle>
+          <DialogTitle>{t('projectForm.createTitle')}</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
@@ -138,9 +146,9 @@ function CreateProjectDialog() {
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Project Name</FormLabel>
+                  <FormLabel>{t('projectForm.projectName')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Q1 Marketing Campaign" data-testid="input-project-name" {...field} />
+                    <Input placeholder={t('projectForm.projectNamePlaceholder')} data-testid="input-project-name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -151,16 +159,16 @@ function CreateProjectDialog() {
               name="totalBudget"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Total Budget (SAR)</FormLabel>
+                  <FormLabel>{t('projectForm.totalBudget')}</FormLabel>
                   <FormControl>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">SAR</span>
+                      <span className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-muted-foreground text-sm`}>{t('currency.sar')}</span>
                       <Input
                         type="number"
                         step="1"
                         min="0"
-                        placeholder="6000"
-                        className="pl-12 tabular-nums"
+                        placeholder={t('projectForm.budgetPlaceholder')}
+                        className={`${isRTL ? 'pr-12' : 'pl-12'} tabular-nums`}
                         data-testid="input-project-budget"
                         {...field}
                       />
@@ -172,10 +180,10 @@ function CreateProjectDialog() {
             />
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="ghost">Cancel</Button>
+                <Button type="button" variant="ghost">{t('common.cancel')}</Button>
               </DialogClose>
               <Button type="submit" disabled={mutation.isPending} data-testid="button-save-project">
-                {mutation.isPending ? "Creating..." : "Create Project"}
+                {mutation.isPending ? t('common.creating') : t('projectForm.createButton')}
               </Button>
             </DialogFooter>
           </form>
@@ -186,6 +194,7 @@ function CreateProjectDialog() {
 }
 
 function ProjectCard({ project }: { project: ProjectWithSpent }) {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const [, navigate] = useLocation();
   
@@ -198,10 +207,10 @@ function ProjectCard({ project }: { project: ProjectWithSpent }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      toast({ title: "Project Deleted", description: "Project and all its data have been removed." });
+      toast({ title: t('toast.projectDeleted'), description: t('toast.projectDeletedDesc') });
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t('common.error'), description: error.message, variant: "destructive" });
     },
   });
 
@@ -219,7 +228,7 @@ function ProjectCard({ project }: { project: ProjectWithSpent }) {
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="flex items-center gap-2 text-lg truncate">
             <FolderOpen className="h-5 w-5 shrink-0 text-muted-foreground" />
-            <span className="truncate">{project.name || "Untitled Project"}</span>
+            <span className="truncate">{project.name || t('project.untitled')}</span>
           </CardTitle>
           <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -235,13 +244,13 @@ function ProjectCard({ project }: { project: ProjectWithSpent }) {
             </AlertDialogTrigger>
             <AlertDialogContent onClick={(e) => e.stopPropagation()}>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete Project</AlertDialogTitle>
+                <AlertDialogTitle>{t('projectDelete.title')}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Are you sure you want to delete "{project.name}"? This will permanently delete all categories, subcategories, and spend entries associated with this project.
+                  {t('projectDelete.description', { name: project.name })}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
                 <AlertDialogAction 
                   onClick={(e) => {
                     e.stopPropagation();
@@ -249,7 +258,7 @@ function ProjectCard({ project }: { project: ProjectWithSpent }) {
                   }}
                   data-testid={`button-confirm-delete-project-${project.id}`}
                 >
-                  Delete
+                  {t('common.delete')}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -262,34 +271,34 @@ function ProjectCard({ project }: { project: ProjectWithSpent }) {
             <div>
               <p className="text-muted-foreground flex items-center gap-1 mb-1">
                 <Wallet className="h-3 w-3" />
-                Budget
+                {t('project.budget')}
               </p>
-              <p className="font-semibold tabular-nums">{formatCurrency(project.totalBudget)}</p>
+              <p className="font-semibold tabular-nums">{formatCurrency(project.totalBudget, i18n.language)}</p>
             </div>
             <div>
               <p className="text-muted-foreground flex items-center gap-1 mb-1">
                 <TrendingDown className="h-3 w-3" />
-                Spent
+                {t('project.spent')}
               </p>
-              <p className="font-semibold tabular-nums">{formatCurrency(project.totalSpent)}</p>
+              <p className="font-semibold tabular-nums">{formatCurrency(project.totalSpent, i18n.language)}</p>
             </div>
             <div>
               <p className="text-muted-foreground flex items-center gap-1 mb-1">
                 <DollarSign className="h-3 w-3" />
-                Remaining
+                {t('project.remaining')}
               </p>
               <p className={`font-semibold tabular-nums ${getStatusColor(percentUsed)}`}>
-                {formatCurrency(remaining)}
+                {formatCurrency(remaining, i18n.language)}
               </p>
             </div>
           </div>
 
           <div className="space-y-2">
             <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">Budget Used</span>
+              <span className="text-muted-foreground">{t('project.budgetUsed')}</span>
               <div className="flex items-center gap-2">
                 <span className="font-medium tabular-nums">{Math.round(percentUsed)}%</span>
-                {getStatusBadge(percentUsed)}
+                <StatusBadge percentUsed={percentUsed} />
               </div>
             </div>
             <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
@@ -306,6 +315,8 @@ function ProjectCard({ project }: { project: ProjectWithSpent }) {
 }
 
 function ProjectsGrid({ projects, isLoading }: { projects: ProjectWithSpent[]; isLoading: boolean }) {
+  const { t } = useTranslation();
+  
   if (isLoading) {
     return (
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -321,8 +332,8 @@ function ProjectsGrid({ projects, isLoading }: { projects: ProjectWithSpent[]; i
       <Card>
         <CardContent className="py-12 text-center">
           <FolderOpen className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-lg font-medium mb-2">No projects yet</h3>
-          <p className="text-muted-foreground mb-6">Create your first project to start tracking your marketing budget.</p>
+          <h3 className="text-lg font-medium mb-2">{t('home.noProjects')}</h3>
+          <p className="text-muted-foreground mb-6">{t('home.createFirst')}</p>
           <CreateProjectDialog />
         </CardContent>
       </Card>
@@ -339,6 +350,7 @@ function ProjectsGrid({ projects, isLoading }: { projects: ProjectWithSpent[]; i
 }
 
 export default function Home() {
+  const { t } = useTranslation();
   const { data: projects = [], isLoading } = useQuery<ProjectWithSpent[]>({
     queryKey: ["/api/projects"],
   });
@@ -348,8 +360,11 @@ export default function Home() {
       <div className="container mx-auto px-4 py-8 max-w-6xl">
         <div className="flex items-start justify-between gap-4 mb-8 flex-wrap">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Marketing Budget Tracker</h1>
-            <p className="text-muted-foreground">Track your marketing budgets and expenses across multiple projects.</p>
+            <div className="flex items-center gap-2 mb-2">
+              <h1 className="text-3xl font-bold">{t('home.title')}</h1>
+              <LanguageToggle />
+            </div>
+            <p className="text-muted-foreground">{t('home.subtitle')}</p>
           </div>
           {projects.length > 0 && <CreateProjectDialog />}
         </div>

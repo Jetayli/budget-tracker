@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useParams, useLocation } from "wouter";
+import { useTranslation } from "react-i18next";
 import { 
   type Budget, 
   type CategoryWithSpent, 
@@ -57,6 +58,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LanguageToggle } from "@/components/language-toggle";
 import { 
   DollarSign, 
   Plus, 
@@ -75,35 +77,6 @@ import { format, parseISO } from "date-fns";
 
 type ProjectWithSpent = Budget & { totalSpent: number };
 
-const projectFormSchema = z.object({
-  name: z.string().min(1, "Project name is required"),
-  totalBudget: z.coerce.number().min(0.01, "Budget must be greater than 0"),
-});
-
-const categoryFormSchema = z.object({
-  name: z.string().min(1, "Category name is required"),
-  allocatedBudget: z.coerce.number().min(0.01, "Budget must be greater than 0"),
-});
-
-const subcategoryFormSchema = z.object({
-  name: z.string().min(1, "Platform name is required"),
-  allocatedBudget: z.coerce.number().min(0.01, "Budget must be greater than 0"),
-  categoryId: z.string().min(1, "Category is required"),
-});
-
-const spendEntryFormSchema = z.object({
-  amount: z.coerce.number().min(0.01, "Amount must be greater than 0"),
-  description: z.string().min(1, "Description is required"),
-  date: z.string().min(1, "Date is required"),
-  categoryId: z.string().min(1, "Category is required"),
-  subcategoryId: z.string().optional().nullable(),
-});
-
-type ProjectFormValues = z.infer<typeof projectFormSchema>;
-type CategoryFormValues = z.infer<typeof categoryFormSchema>;
-type SubcategoryFormValues = z.infer<typeof subcategoryFormSchema>;
-type SpendEntryFormValues = z.infer<typeof spendEntryFormSchema>;
-
 function getTodayDateString(): string {
   return format(new Date(), "yyyy-MM-dd");
 }
@@ -116,8 +89,9 @@ function formatDisplayDate(dateString: string): string {
   }
 }
 
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-SA", {
+function formatCurrency(amount: number, language: string = 'en'): string {
+  const locale = language === 'ar' ? 'ar-SA' : 'en-SA';
+  return new Intl.NumberFormat(locale, {
     style: "currency",
     currency: "SAR",
     minimumFractionDigits: 0,
@@ -137,14 +111,16 @@ function getProgressColor(percentUsed: number): string {
   return "bg-green-500";
 }
 
-function getStatusBadge(percentUsed: number) {
+function StatusBadge({ percentUsed }: { percentUsed: number }) {
+  const { t } = useTranslation();
+  
   if (percentUsed >= 80) {
-    return <Badge variant="destructive" className="text-xs">Over 80%</Badge>;
+    return <Badge variant="destructive" className="text-xs">{t('status.over80')}</Badge>;
   }
   if (percentUsed >= 50) {
-    return <Badge className="bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border-yellow-500/30 text-xs">50-80%</Badge>;
+    return <Badge className="bg-yellow-500/20 text-yellow-700 dark:text-yellow-300 border-yellow-500/30 text-xs">{t('status.between50and80')}</Badge>;
   }
-  return <Badge className="bg-green-500/20 text-green-700 dark:text-green-300 border-green-500/30 text-xs">Under 50%</Badge>;
+  return <Badge className="bg-green-500/20 text-green-700 dark:text-green-300 border-green-500/30 text-xs">{t('status.under50')}</Badge>;
 }
 
 function EditProjectDialog({ 
@@ -156,7 +132,15 @@ function EditProjectDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
+  
+  const projectFormSchema = z.object({
+    name: z.string().min(1, t('projectForm.projectNameRequired')),
+    totalBudget: z.coerce.number().min(0.01, t('projectForm.budgetRequired')),
+  });
+
+  type ProjectFormValues = z.infer<typeof projectFormSchema>;
   
   const form = useForm<ProjectFormValues>({
     resolver: zodResolver(projectFormSchema),
@@ -183,19 +167,21 @@ function EditProjectDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id] });
-      toast({ title: "Project Updated", description: "Your project has been updated." });
+      toast({ title: t('toast.projectUpdated'), description: t('toast.projectUpdatedDesc') });
       onOpenChange(false);
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t('common.error'), description: error.message, variant: "destructive" });
     },
   });
+
+  const isRTL = i18n.language === 'ar';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Project</DialogTitle>
+          <DialogTitle>{t('projectForm.editTitle')}</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
@@ -204,9 +190,9 @@ function EditProjectDialog({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Project Name</FormLabel>
+                  <FormLabel>{t('projectForm.projectName')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="Project Name" data-testid="input-edit-project-name" {...field} />
+                    <Input placeholder={t('projectForm.projectNamePlaceholder')} data-testid="input-edit-project-name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -217,15 +203,15 @@ function EditProjectDialog({
               name="totalBudget"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Total Budget (SAR)</FormLabel>
+                  <FormLabel>{t('projectForm.totalBudget')}</FormLabel>
                   <FormControl>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">SAR</span>
+                      <span className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-muted-foreground text-sm`}>{t('currency.sar')}</span>
                       <Input
                         type="number"
                         step="1"
                         min="0"
-                        className="pl-12 tabular-nums"
+                        className={`${isRTL ? 'pr-12' : 'pl-12'} tabular-nums`}
                         data-testid="input-edit-project-budget"
                         {...field}
                       />
@@ -237,10 +223,10 @@ function EditProjectDialog({
             />
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="ghost">Cancel</Button>
+                <Button type="button" variant="ghost">{t('common.cancel')}</Button>
               </DialogClose>
               <Button type="submit" disabled={mutation.isPending} data-testid="button-update-project">
-                {mutation.isPending ? "Saving..." : "Update Project"}
+                {mutation.isPending ? t('common.saving') : t('projectForm.updateButton')}
               </Button>
             </DialogFooter>
           </form>
@@ -251,6 +237,7 @@ function EditProjectDialog({
 }
 
 function ProjectOverview({ project, isLoading }: { project: ProjectWithSpent | null; isLoading: boolean }) {
+  const { t, i18n } = useTranslation();
   const [editOpen, setEditOpen] = useState(false);
 
   if (isLoading) {
@@ -280,7 +267,7 @@ function ProjectOverview({ project, isLoading }: { project: ProjectWithSpent | n
         <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
           <CardTitle className="flex items-center gap-2">
             <Target className="h-5 w-5" />
-            {project.name || "Project Budget"}
+            {project.name || t('project.projectBudget')}
           </CardTitle>
           <Button size="icon" variant="ghost" onClick={() => setEditOpen(true)} data-testid="button-edit-project">
             <Pencil className="h-4 w-4" />
@@ -291,38 +278,38 @@ function ProjectOverview({ project, isLoading }: { project: ProjectWithSpent | n
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground flex items-center gap-1">
                 <Wallet className="h-4 w-4" />
-                Total Budget
+                {t('project.totalBudget')}
               </p>
               <p className="text-2xl font-bold tabular-nums" data-testid="text-total-budget">
-                {formatCurrency(project.totalBudget)}
+                {formatCurrency(project.totalBudget, i18n.language)}
               </p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground flex items-center gap-1">
                 <TrendingDown className="h-4 w-4" />
-                Total Spent
+                {t('project.totalSpent')}
               </p>
               <p className="text-2xl font-bold tabular-nums" data-testid="text-total-spent">
-                {formatCurrency(project.totalSpent)}
+                {formatCurrency(project.totalSpent, i18n.language)}
               </p>
             </div>
             <div className="space-y-1">
               <p className="text-sm text-muted-foreground flex items-center gap-1">
                 <DollarSign className="h-4 w-4" />
-                Remaining
+                {t('project.remaining')}
               </p>
               <p className={`text-2xl font-bold tabular-nums ${getStatusColor(percentUsed)}`} data-testid="text-remaining">
-                {formatCurrency(remaining)}
+                {formatCurrency(remaining, i18n.language)}
               </p>
             </div>
           </div>
           
           <div className="space-y-2">
             <div className="flex justify-between items-center text-sm">
-              <span className="text-muted-foreground">Budget Used</span>
+              <span className="text-muted-foreground">{t('project.budgetUsed')}</span>
               <div className="flex items-center gap-2">
                 <span className="font-medium tabular-nums">{Math.round(percentUsed)}%</span>
-                {getStatusBadge(percentUsed)}
+                <StatusBadge percentUsed={percentUsed} />
               </div>
             </div>
             <div className="relative h-3 w-full overflow-hidden rounded-full bg-muted">
@@ -340,8 +327,16 @@ function ProjectOverview({ project, isLoading }: { project: ProjectWithSpent | n
 }
 
 function AddCategoryDialog({ projectId, onSuccess }: { projectId: string; onSuccess: () => void }) {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  
+  const categoryFormSchema = z.object({
+    name: z.string().min(1, t('category.categoryNamePlaceholder')),
+    allocatedBudget: z.coerce.number().min(0.01, t('projectForm.budgetRequired')),
+  });
+
+  type CategoryFormValues = z.infer<typeof categoryFormSchema>;
   
   const form = useForm<CategoryFormValues>({
     resolver: zodResolver(categoryFormSchema),
@@ -359,27 +354,29 @@ function AddCategoryDialog({ projectId, onSuccess }: { projectId: string; onSucc
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      toast({ title: "Category Added", description: "Your category has been created." });
+      toast({ title: t('toast.categoryAdded'), description: t('toast.categoryAddedDesc') });
       setOpen(false);
       form.reset();
       onSuccess();
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t('common.error'), description: error.message, variant: "destructive" });
     },
   });
+
+  const isRTL = i18n.language === 'ar';
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" data-testid="button-add-category">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Category
+          <Plus className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+          {t('category.addCategory')}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Category</DialogTitle>
+          <DialogTitle>{t('category.addCategory')}</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
@@ -388,9 +385,9 @@ function AddCategoryDialog({ projectId, onSuccess }: { projectId: string; onSucc
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Category Name</FormLabel>
+                  <FormLabel>{t('category.categoryName')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Social Media, Google Ads" data-testid="input-category-name" {...field} />
+                    <Input placeholder={t('category.categoryNamePlaceholder')} data-testid="input-category-name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -401,16 +398,16 @@ function AddCategoryDialog({ projectId, onSuccess }: { projectId: string; onSucc
               name="allocatedBudget"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Allocated Budget (SAR)</FormLabel>
+                  <FormLabel>{t('category.allocatedBudget')}</FormLabel>
                   <FormControl>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">SAR</span>
+                      <span className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-muted-foreground text-sm`}>{t('currency.sar')}</span>
                       <Input
                         type="number"
                         step="1"
                         min="0"
-                        placeholder="2000"
-                        className="pl-12 tabular-nums"
+                        placeholder={t('category.budgetPlaceholder')}
+                        className={`${isRTL ? 'pr-12' : 'pl-12'} tabular-nums`}
                         data-testid="input-category-budget"
                         {...field}
                       />
@@ -422,10 +419,10 @@ function AddCategoryDialog({ projectId, onSuccess }: { projectId: string; onSucc
             />
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="ghost">Cancel</Button>
+                <Button type="button" variant="ghost">{t('common.cancel')}</Button>
               </DialogClose>
               <Button type="submit" disabled={mutation.isPending} data-testid="button-save-category">
-                {mutation.isPending ? "Adding..." : "Add Category"}
+                {mutation.isPending ? t('common.adding') : t('category.addCategory')}
               </Button>
             </DialogFooter>
           </form>
@@ -446,7 +443,15 @@ function EditCategoryDialog({
   onOpenChange: (open: boolean) => void;
   projectId: string;
 }) {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
+  
+  const categoryFormSchema = z.object({
+    name: z.string().min(1, t('category.categoryNamePlaceholder')),
+    allocatedBudget: z.coerce.number().min(0.01, t('projectForm.budgetRequired')),
+  });
+
+  type CategoryFormValues = z.infer<typeof categoryFormSchema>;
   
   const form = useForm<CategoryFormValues>({
     resolver: zodResolver(categoryFormSchema),
@@ -473,13 +478,15 @@ function EditCategoryDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
-      toast({ title: "Category Updated", description: "Your category has been updated." });
+      toast({ title: t('toast.categoryUpdated'), description: t('toast.categoryUpdatedDesc') });
       onOpenChange(false);
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t('common.error'), description: error.message, variant: "destructive" });
     },
   });
+
+  const isRTL = i18n.language === 'ar';
 
   if (!category) return null;
 
@@ -487,7 +494,7 @@ function EditCategoryDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Category</DialogTitle>
+          <DialogTitle>{t('category.editCategory')}</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
@@ -496,9 +503,9 @@ function EditCategoryDialog({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Category Name</FormLabel>
+                  <FormLabel>{t('category.categoryName')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="Category Name" data-testid="input-edit-category-name" {...field} />
+                    <Input placeholder={t('category.categoryName')} data-testid="input-edit-category-name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -509,15 +516,15 @@ function EditCategoryDialog({
               name="allocatedBudget"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Allocated Budget (SAR)</FormLabel>
+                  <FormLabel>{t('category.allocatedBudget')}</FormLabel>
                   <FormControl>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">SAR</span>
+                      <span className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-muted-foreground text-sm`}>{t('currency.sar')}</span>
                       <Input
                         type="number"
                         step="1"
                         min="0"
-                        className="pl-12 tabular-nums"
+                        className={`${isRTL ? 'pr-12' : 'pl-12'} tabular-nums`}
                         data-testid="input-edit-category-budget"
                         {...field}
                       />
@@ -529,10 +536,10 @@ function EditCategoryDialog({
             />
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="ghost">Cancel</Button>
+                <Button type="button" variant="ghost">{t('common.cancel')}</Button>
               </DialogClose>
               <Button type="submit" disabled={mutation.isPending} data-testid="button-update-category">
-                {mutation.isPending ? "Saving..." : "Update Category"}
+                {mutation.isPending ? t('common.saving') : t('category.editCategory')}
               </Button>
             </DialogFooter>
           </form>
@@ -553,8 +560,17 @@ function AddSubcategoryDialog({
   projectId: string;
   onSuccess: () => void;
 }) {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  
+  const subcategoryFormSchema = z.object({
+    name: z.string().min(1, t('platform.platformNamePlaceholder')),
+    allocatedBudget: z.coerce.number().min(0.01, t('projectForm.budgetRequired')),
+    categoryId: z.string().min(1),
+  });
+
+  type SubcategoryFormValues = z.infer<typeof subcategoryFormSchema>;
   
   const form = useForm<SubcategoryFormValues>({
     resolver: zodResolver(subcategoryFormSchema),
@@ -573,27 +589,29 @@ function AddSubcategoryDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/categories", categoryId, "subcategories"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
-      toast({ title: "Platform Added", description: "Your platform has been created." });
+      toast({ title: t('toast.platformAdded'), description: t('toast.platformAddedDesc') });
       setOpen(false);
       form.reset({ name: "", allocatedBudget: undefined as unknown as number, categoryId });
       onSuccess();
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t('common.error'), description: error.message, variant: "destructive" });
     },
   });
+
+  const isRTL = i18n.language === 'ar';
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button size="sm" variant="ghost" data-testid={`button-add-subcategory-${categoryId}`}>
-          <Plus className="h-3 w-3 mr-1" />
-          Add
+          <Plus className={`h-3 w-3 ${isRTL ? 'ml-1' : 'mr-1'}`} />
+          {t('common.add')}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Add Platform to {categoryName}</DialogTitle>
+          <DialogTitle>{t('platform.addPlatformTo', { name: categoryName })}</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
@@ -602,9 +620,9 @@ function AddSubcategoryDialog({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Platform Name</FormLabel>
+                  <FormLabel>{t('platform.platformName')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Instagram, Facebook, TikTok" data-testid="input-subcategory-name" {...field} />
+                    <Input placeholder={t('platform.platformNamePlaceholder')} data-testid="input-subcategory-name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -615,16 +633,16 @@ function AddSubcategoryDialog({
               name="allocatedBudget"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Allocated Budget (SAR)</FormLabel>
+                  <FormLabel>{t('platform.allocatedBudget')}</FormLabel>
                   <FormControl>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">SAR</span>
+                      <span className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-muted-foreground text-sm`}>{t('currency.sar')}</span>
                       <Input
                         type="number"
                         step="1"
                         min="0"
-                        placeholder="500"
-                        className="pl-12 tabular-nums"
+                        placeholder={t('platform.budgetPlaceholder')}
+                        className={`${isRTL ? 'pr-12' : 'pl-12'} tabular-nums`}
                         data-testid="input-subcategory-budget"
                         {...field}
                       />
@@ -636,10 +654,10 @@ function AddSubcategoryDialog({
             />
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="ghost">Cancel</Button>
+                <Button type="button" variant="ghost">{t('common.cancel')}</Button>
               </DialogClose>
               <Button type="submit" disabled={mutation.isPending} data-testid="button-save-subcategory">
-                {mutation.isPending ? "Adding..." : "Add Platform"}
+                {mutation.isPending ? t('common.adding') : t('platform.addPlatform')}
               </Button>
             </DialogFooter>
           </form>
@@ -662,7 +680,16 @@ function EditSubcategoryDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
+  
+  const subcategoryFormSchema = z.object({
+    name: z.string().min(1, t('platform.platformNamePlaceholder')),
+    allocatedBudget: z.coerce.number().min(0.01, t('projectForm.budgetRequired')),
+    categoryId: z.string().min(1),
+  });
+
+  type SubcategoryFormValues = z.infer<typeof subcategoryFormSchema>;
   
   const form = useForm<SubcategoryFormValues>({
     resolver: zodResolver(subcategoryFormSchema),
@@ -691,19 +718,21 @@ function EditSubcategoryDialog({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/categories", categoryId, "subcategories"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
-      toast({ title: "Platform Updated", description: "Your platform has been updated." });
+      toast({ title: t('toast.platformUpdated'), description: t('toast.platformUpdatedDesc') });
       onOpenChange(false);
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t('common.error'), description: error.message, variant: "destructive" });
     },
   });
+
+  const isRTL = i18n.language === 'ar';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Platform</DialogTitle>
+          <DialogTitle>{t('platform.editPlatform')}</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
@@ -712,9 +741,9 @@ function EditSubcategoryDialog({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Platform Name</FormLabel>
+                  <FormLabel>{t('platform.platformName')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="Platform Name" data-testid="input-edit-subcategory-name" {...field} />
+                    <Input placeholder={t('platform.platformName')} data-testid="input-edit-subcategory-name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -725,15 +754,15 @@ function EditSubcategoryDialog({
               name="allocatedBudget"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Allocated Budget (SAR)</FormLabel>
+                  <FormLabel>{t('platform.allocatedBudget')}</FormLabel>
                   <FormControl>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">SAR</span>
+                      <span className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-muted-foreground text-sm`}>{t('currency.sar')}</span>
                       <Input
                         type="number"
                         step="1"
                         min="0"
-                        className="pl-12 tabular-nums"
+                        className={`${isRTL ? 'pr-12' : 'pl-12'} tabular-nums`}
                         data-testid="input-edit-subcategory-budget"
                         {...field}
                       />
@@ -745,10 +774,10 @@ function EditSubcategoryDialog({
             />
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="ghost">Cancel</Button>
+                <Button type="button" variant="ghost">{t('common.cancel')}</Button>
               </DialogClose>
               <Button type="submit" disabled={mutation.isPending} data-testid="button-update-subcategory">
-                {mutation.isPending ? "Saving..." : "Update Platform"}
+                {mutation.isPending ? t('common.saving') : t('platform.editPlatform')}
               </Button>
             </DialogFooter>
           </form>
@@ -769,6 +798,7 @@ function SubcategoryRow({
   projectId: string;
   onDelete: () => void;
 }) {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const [editOpen, setEditOpen] = useState(false);
   
@@ -783,11 +813,11 @@ function SubcategoryRow({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/categories", categoryId, "subcategories"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
-      toast({ title: "Platform Deleted", description: "Platform has been removed." });
+      toast({ title: t('toast.platformDeleted'), description: t('toast.platformDeletedDesc') });
       onDelete();
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t('common.error'), description: error.message, variant: "destructive" });
     },
   });
 
@@ -802,7 +832,7 @@ function SubcategoryRow({
             <span className="text-sm font-medium truncate">{subcategory.name}</span>
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <span className="tabular-nums">{formatCurrency(subcategory.spent)} / {formatCurrency(subcategory.allocatedBudget)}</span>
+            <span className="tabular-nums">{formatCurrency(subcategory.spent, i18n.language)} / {formatCurrency(subcategory.allocatedBudget, i18n.language)}</span>
             <span className={`font-medium tabular-nums ${getStatusColor(percentUsed)}`}>({Math.round(percentUsed)}%)</span>
           </div>
         </div>
@@ -818,14 +848,14 @@ function SubcategoryRow({
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>
-                <AlertDialogTitle>Delete Platform</AlertDialogTitle>
+                <AlertDialogTitle>{t('platform.deletePlatform')}</AlertDialogTitle>
                 <AlertDialogDescription>
-                  Are you sure you want to delete "{subcategory.name}"? This will not delete spend entries but they will no longer be associated with this platform.
+                  {t('platform.deleteConfirm', { name: subcategory.name })}
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={() => deleteMutation.mutate()}>Delete</AlertDialogAction>
+                <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                <AlertDialogAction onClick={() => deleteMutation.mutate()}>{t('common.delete')}</AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
@@ -843,6 +873,7 @@ function SubcategoryRow({
 }
 
 function CategoryCard({ category, projectId }: { category: CategoryWithSpent; projectId: string }) {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const [isExpanded, setIsExpanded] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -863,10 +894,10 @@ function CategoryCard({ category, projectId }: { category: CategoryWithSpent; pr
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      toast({ title: "Category Deleted", description: "Category and its platforms have been removed." });
+      toast({ title: t('toast.categoryDeleted'), description: t('toast.categoryDeletedDesc') });
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t('common.error'), description: error.message, variant: "destructive" });
     },
   });
 
@@ -896,14 +927,14 @@ function CategoryCard({ category, projectId }: { category: CategoryWithSpent; pr
                   </AlertDialogTrigger>
                   <AlertDialogContent>
                     <AlertDialogHeader>
-                      <AlertDialogTitle>Delete Category</AlertDialogTitle>
+                      <AlertDialogTitle>{t('category.deleteCategory')}</AlertDialogTitle>
                       <AlertDialogDescription>
-                        Are you sure you want to delete "{category.name}"? This will also delete all platforms under this category.
+                        {t('category.deleteConfirm', { name: category.name })}
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => deleteMutation.mutate()}>Delete</AlertDialogAction>
+                      <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => deleteMutation.mutate()}>{t('common.delete')}</AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
@@ -913,18 +944,18 @@ function CategoryCard({ category, projectId }: { category: CategoryWithSpent; pr
           <CardContent className="pt-0">
             <div className="space-y-3">
               <div className="flex justify-between items-center text-sm">
-                <span className="text-muted-foreground">Spent / Allocated</span>
+                <span className="text-muted-foreground">{t('project.spent')} / {t('project.budget')}</span>
                 <span className="font-medium tabular-nums">
-                  {formatCurrency(category.spent)} / {formatCurrency(category.allocatedBudget)}
+                  {formatCurrency(category.spent, i18n.language)} / {formatCurrency(category.allocatedBudget, i18n.language)}
                 </span>
               </div>
               
               <div className="space-y-1">
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-muted-foreground">Usage</span>
+                  <span className="text-muted-foreground">{t('project.budgetUsed')}</span>
                   <div className="flex items-center gap-2">
                     <span className={`font-medium tabular-nums ${getStatusColor(percentUsed)}`}>{Math.round(percentUsed)}%</span>
-                    {getStatusBadge(percentUsed)}
+                    <StatusBadge percentUsed={percentUsed} />
                   </div>
                 </div>
                 <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
@@ -938,7 +969,7 @@ function CategoryCard({ category, projectId }: { category: CategoryWithSpent; pr
               <CollapsibleContent>
                 <div className="pt-3 space-y-3 border-t">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium text-muted-foreground">Platforms</span>
+                    <span className="text-sm font-medium text-muted-foreground">{t('platform.platforms')}</span>
                     <AddSubcategoryDialog 
                       categoryId={category.id} 
                       categoryName={category.name}
@@ -954,7 +985,7 @@ function CategoryCard({ category, projectId }: { category: CategoryWithSpent; pr
                     </div>
                   ) : subcategories.length === 0 ? (
                     <p className="text-sm text-muted-foreground text-center py-4">
-                      No platforms yet. Add platforms like Instagram, Facebook, etc.
+                      {t('platform.platformNamePlaceholder')}
                     </p>
                   ) : (
                     <div className="space-y-2">
@@ -994,9 +1025,20 @@ function AddSpendEntryDialog({
   projectId: string;
   onSuccess: () => void;
 }) {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [selectedCategoryId, setSelectedCategoryId] = useState("");
+  
+  const spendEntryFormSchema = z.object({
+    amount: z.coerce.number().min(0.01, t('projectForm.budgetRequired')),
+    description: z.string().min(1, t('spend.descriptionPlaceholder')),
+    date: z.string().min(1),
+    categoryId: z.string().min(1, t('spend.selectCategory')),
+    subcategoryId: z.string().optional().nullable(),
+  });
+
+  type SpendEntryFormValues = z.infer<typeof spendEntryFormSchema>;
   
   const form = useForm<SpendEntryFormValues>({
     resolver: zodResolver(spendEntryFormSchema),
@@ -1027,14 +1069,14 @@ function AddSpendEntryDialog({
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "spend-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      toast({ title: "Spend Logged", description: "Your spend entry has been recorded." });
+      toast({ title: t('toast.spendAdded'), description: t('toast.spendAddedDesc') });
       setOpen(false);
       form.reset({ amount: undefined as unknown as number, description: "", date: getTodayDateString(), categoryId: "", subcategoryId: null });
       setSelectedCategoryId("");
       onSuccess();
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t('common.error'), description: error.message, variant: "destructive" });
     },
   });
 
@@ -1044,17 +1086,19 @@ function AddSpendEntryDialog({
     form.setValue("subcategoryId", null);
   };
 
+  const isRTL = i18n.language === 'ar';
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button data-testid="button-add-spend">
-          <Receipt className="h-4 w-4 mr-2" />
-          Log Spend
+          <Receipt className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+          {t('spend.addSpend')}
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Log Spend Entry</DialogTitle>
+          <DialogTitle>{t('spend.addSpend')}</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
@@ -1063,11 +1107,11 @@ function AddSpendEntryDialog({
               name="amount"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Amount (SAR)</FormLabel>
+                  <FormLabel>{t('spend.amount')}</FormLabel>
                   <FormControl>
                     <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">SAR</span>
-                      <Input type="number" step="0.01" min="0" placeholder="100" className="pl-12 tabular-nums" data-testid="input-spend-amount" {...field} />
+                      <span className={`absolute ${isRTL ? 'right-3' : 'left-3'} top-1/2 -translate-y-1/2 text-muted-foreground text-sm`}>{t('currency.sar')}</span>
+                      <Input type="number" step="0.01" min="0" placeholder={t('spend.amountPlaceholder')} className={`${isRTL ? 'pr-12' : 'pl-12'} tabular-nums`} data-testid="input-spend-amount" {...field} />
                     </div>
                   </FormControl>
                   <FormMessage />
@@ -1079,9 +1123,9 @@ function AddSpendEntryDialog({
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
+                  <FormLabel>{t('spend.description')}</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Week 1 Ad Campaign" data-testid="input-spend-description" {...field} />
+                    <Input placeholder={t('spend.descriptionPlaceholder')} data-testid="input-spend-description" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -1092,7 +1136,7 @@ function AddSpendEntryDialog({
               name="date"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Date</FormLabel>
+                  <FormLabel>{t('spend.date')}</FormLabel>
                   <FormControl>
                     <Input type="date" data-testid="input-spend-date" {...field} />
                   </FormControl>
@@ -1105,11 +1149,11 @@ function AddSpendEntryDialog({
               name="categoryId"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Category</FormLabel>
+                  <FormLabel>{t('sections.categories')}</FormLabel>
                   <Select onValueChange={handleCategoryChange} value={field.value}>
                     <FormControl>
                       <SelectTrigger data-testid="select-spend-category">
-                        <SelectValue placeholder="Select category" />
+                        <SelectValue placeholder={t('spend.selectCategory')} />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -1128,15 +1172,15 @@ function AddSpendEntryDialog({
                 name="subcategoryId"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Platform (Optional)</FormLabel>
+                    <FormLabel>{t('platform.platforms')}</FormLabel>
                     <Select onValueChange={field.onChange} value={field.value || "none"}>
                       <FormControl>
                         <SelectTrigger data-testid="select-spend-subcategory">
-                          <SelectValue placeholder="Select platform (optional)" />
+                          <SelectValue placeholder={t('spend.selectPlatform')} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="none">No specific platform</SelectItem>
+                        <SelectItem value="none">{t('spend.noPlatform')}</SelectItem>
                         {subcategories.map((sub) => (
                           <SelectItem key={sub.id} value={sub.id}>{sub.name}</SelectItem>
                         ))}
@@ -1149,10 +1193,10 @@ function AddSpendEntryDialog({
             )}
             <DialogFooter>
               <DialogClose asChild>
-                <Button type="button" variant="ghost">Cancel</Button>
+                <Button type="button" variant="ghost">{t('common.cancel')}</Button>
               </DialogClose>
               <Button type="submit" disabled={mutation.isPending} data-testid="button-save-spend">
-                {mutation.isPending ? "Logging..." : "Log Spend"}
+                {mutation.isPending ? t('common.adding') : t('spend.addSpend')}
               </Button>
             </DialogFooter>
           </form>
@@ -1163,6 +1207,7 @@ function AddSpendEntryDialog({
 }
 
 function SpendEntriesList({ categories, projectId }: { categories: CategoryWithSpent[]; projectId: string }) {
+  const { t, i18n } = useTranslation();
   const { toast } = useToast();
   
   const { data: entries = [], isLoading } = useQuery<SpendEntry[]>({
@@ -1177,10 +1222,10 @@ function SpendEntriesList({ categories, projectId }: { categories: CategoryWithS
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "spend-entries"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
-      toast({ title: "Entry Deleted", description: "Spend entry has been removed." });
+      toast({ title: t('toast.spendDeleted'), description: t('toast.spendDeletedDesc') });
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: t('common.error'), description: error.message, variant: "destructive" });
     },
   });
 
@@ -1192,7 +1237,7 @@ function SpendEntriesList({ categories, projectId }: { categories: CategoryWithS
     return (
       <Card>
         <CardHeader>
-          <CardTitle>Recent Spend Entries</CardTitle>
+          <CardTitle>{t('spend.recentSpendEntries')}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-3">
@@ -1210,14 +1255,14 @@ function SpendEntriesList({ categories, projectId }: { categories: CategoryWithS
       <CardHeader className="flex flex-row items-center justify-between gap-2">
         <CardTitle className="flex items-center gap-2">
           <Receipt className="h-5 w-5" />
-          Recent Spend Entries
+          {t('spend.recentSpendEntries')}
         </CardTitle>
         <AddSpendEntryDialog categories={categories} projectId={projectId} onSuccess={() => {}} />
       </CardHeader>
       <CardContent>
         {entries.length === 0 ? (
           <p className="text-muted-foreground text-center py-8">
-            No spend entries yet. Log your first expense to start tracking.
+            {t('spend.noSpendEntries')}. {t('spend.addFirstSpend')}
           </p>
         ) : (
           <div className="space-y-3">
@@ -1235,7 +1280,7 @@ function SpendEntriesList({ categories, projectId }: { categories: CategoryWithS
                   <p className="text-xs text-muted-foreground">{formatDisplayDate(entry.date)}</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  <span className="font-semibold tabular-nums">{formatCurrency(entry.amount)}</span>
+                  <span className="font-semibold tabular-nums">{formatCurrency(entry.amount, i18n.language)}</span>
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button size="icon" variant="ghost" data-testid={`button-delete-spend-${entry.id}`}>
@@ -1244,14 +1289,14 @@ function SpendEntriesList({ categories, projectId }: { categories: CategoryWithS
                     </AlertDialogTrigger>
                     <AlertDialogContent>
                       <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Spend Entry</AlertDialogTitle>
+                        <AlertDialogTitle>{t('spend.deleteSpend')}</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Are you sure you want to delete this spend entry?
+                          {t('spend.deleteConfirm')}
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
-                        <AlertDialogCancel>Cancel</AlertDialogCancel>
-                        <AlertDialogAction onClick={() => deleteMutation.mutate(entry.id)}>Delete</AlertDialogAction>
+                        <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => deleteMutation.mutate(entry.id)}>{t('common.delete')}</AlertDialogAction>
                       </AlertDialogFooter>
                     </AlertDialogContent>
                   </AlertDialog>
@@ -1266,11 +1311,12 @@ function SpendEntriesList({ categories, projectId }: { categories: CategoryWithS
 }
 
 export default function ProjectDetail() {
+  const { t, i18n } = useTranslation();
   const params = useParams<{ id: string }>();
   const [, navigate] = useLocation();
-  const projectId = params.id;
+  const projectId = params.id || "";
 
-  const { data: project, isLoading: projectLoading, error } = useQuery<ProjectWithSpent>({
+  const { data: project, isLoading: projectLoading } = useQuery<ProjectWithSpent>({
     queryKey: ["/api/projects", projectId],
     enabled: !!projectId,
   });
@@ -1280,85 +1326,70 @@ export default function ProjectDetail() {
     enabled: !!projectId,
   });
 
+  const isRTL = i18n.language === 'ar';
+
   if (!projectId) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="max-w-md">
-          <CardContent className="p-6 text-center">
-            <p className="text-muted-foreground">Project ID not found</p>
-            <Button className="mt-4" onClick={() => navigate("/")}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Projects
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <Card className="max-w-md">
-          <CardContent className="p-6 text-center">
-            <p className="text-muted-foreground">Project not found or an error occurred</p>
-            <Button className="mt-4" onClick={() => navigate("/")} data-testid="button-back-to-projects">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Projects
-            </Button>
-          </CardContent>
-        </Card>
+        <p className="text-muted-foreground">Project not found</p>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8 max-w-5xl">
-        <div className="mb-6">
-          <Button variant="ghost" onClick={() => navigate("/")} className="mb-4" data-testid="button-back-to-projects">
-            <ArrowLeft className="h-4 w-4 mr-2" />
-            Back to Projects
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
+        <div className="flex items-center justify-between gap-4 mb-6">
+          <Button 
+            variant="ghost" 
+            onClick={() => navigate("/")}
+            data-testid="button-back-to-projects"
+          >
+            <ArrowLeft className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+            {t('navigation.backToProjects')}
           </Button>
-          <h1 className="text-3xl font-bold mb-2">{project?.name || "Loading..."}</h1>
-          <p className="text-muted-foreground">Manage budget, categories, and track spending for this project.</p>
+          <LanguageToggle />
         </div>
 
         <div className="space-y-6">
           <ProjectOverview project={project || null} isLoading={projectLoading} />
 
-          <div className="space-y-4">
-            <div className="flex items-center justify-between gap-2 flex-wrap">
-              <h2 className="text-xl font-semibold flex items-center gap-2">
-                <Layers className="h-5 w-5" />
-                Budget Categories
-              </h2>
-              {projectId && <AddCategoryDialog projectId={projectId} onSuccess={() => {}} />}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold flex items-center gap-2">
+                  <Layers className="h-5 w-5" />
+                  {t('sections.categories')}
+                </h2>
+                <AddCategoryDialog projectId={projectId} onSuccess={() => {}} />
+              </div>
+              
+              {categoriesLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-32" />
+                  <Skeleton className="h-32" />
+                </div>
+              ) : categories.length === 0 ? (
+                <Card>
+                  <CardContent className="py-8 text-center">
+                    <Layers className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
+                    <h3 className="font-medium mb-1">{t('category.noCategories')}</h3>
+                    <p className="text-sm text-muted-foreground">{t('category.createFirstCategory')}</p>
+                  </CardContent>
+                </Card>
+              ) : (
+                <div className="space-y-4">
+                  {categories.map((category) => (
+                    <CategoryCard key={category.id} category={category} projectId={projectId} />
+                  ))}
+                </div>
+              )}
             </div>
 
-            {categoriesLoading ? (
-              <div className="grid gap-4 md:grid-cols-2">
-                <Skeleton className="h-40" />
-                <Skeleton className="h-40" />
-              </div>
-            ) : categories.length === 0 ? (
-              <Card>
-                <CardContent className="py-8 text-center">
-                  <Layers className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
-                  <p className="text-muted-foreground mb-4">No categories yet. Add your first category to start allocating budget.</p>
-                  {projectId && <AddCategoryDialog projectId={projectId} onSuccess={() => {}} />}
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2">
-                {categories.map((category) => (
-                  <CategoryCard key={category.id} category={category} projectId={projectId} />
-                ))}
-              </div>
-            )}
+            <div>
+              <SpendEntriesList categories={categories} projectId={projectId} />
+            </div>
           </div>
-
-          {projectId && <SpendEntriesList categories={categories} projectId={projectId} />}
         </div>
       </div>
     </div>
