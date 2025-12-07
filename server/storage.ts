@@ -1,37 +1,68 @@
-import { type User, type InsertUser } from "@shared/schema";
+import { 
+  type Budget, 
+  type InsertBudget, 
+  type Expense, 
+  type InsertExpense 
+} from "@shared/schema";
 import { randomUUID } from "crypto";
 
-// modify the interface with any CRUD methods
-// you might need
-
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  getBudget(): Promise<Budget | null>;
+  setBudget(budget: InsertBudget): Promise<Budget>;
+  
+  getExpenses(): Promise<Expense[]>;
+  getExpense(id: string): Promise<Expense | undefined>;
+  createExpense(expense: InsertExpense): Promise<Expense>;
+  updateExpense(id: string, expense: InsertExpense): Promise<Expense | undefined>;
+  deleteExpense(id: string): Promise<boolean>;
 }
 
 export class MemStorage implements IStorage {
-  private users: Map<string, User>;
+  private budget: Budget | null;
+  private expenses: Map<string, Expense>;
 
   constructor() {
-    this.users = new Map();
+    this.budget = null;
+    this.expenses = new Map();
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getBudget(): Promise<Budget | null> {
+    return this.budget;
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
+  async setBudget(insertBudget: InsertBudget): Promise<Budget> {
+    const id = this.budget?.id || randomUUID();
+    const budget: Budget = { id, ...insertBudget };
+    this.budget = budget;
+    return budget;
   }
 
-  async createUser(insertUser: InsertUser): Promise<User> {
+  async getExpenses(): Promise<Expense[]> {
+    return [...Array.from(this.expenses.values())].reverse();
+  }
+
+  async getExpense(id: string): Promise<Expense | undefined> {
+    return this.expenses.get(id);
+  }
+
+  async createExpense(insertExpense: InsertExpense): Promise<Expense> {
     const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+    const expense: Expense = { id, ...insertExpense };
+    this.expenses.set(id, expense);
+    return expense;
+  }
+
+  async updateExpense(id: string, insertExpense: InsertExpense): Promise<Expense | undefined> {
+    const existing = this.expenses.get(id);
+    if (!existing) return undefined;
+    
+    const updated: Expense = { id, ...insertExpense };
+    this.expenses.set(id, updated);
+    return updated;
+  }
+
+  async deleteExpense(id: string): Promise<boolean> {
+    return this.expenses.delete(id);
   }
 }
 
