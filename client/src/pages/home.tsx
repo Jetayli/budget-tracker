@@ -56,7 +56,11 @@ import {
   Wallet,
   Receipt,
   Calendar,
-  AlertTriangle
+  AlertTriangle,
+  Search,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react";
 import { format, isWithinInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO } from "date-fns";
 
@@ -90,6 +94,8 @@ function formatDisplayDate(dateString: string): string {
 }
 
 type DateFilter = "all" | "week" | "month";
+type SortField = "date" | "amount" | "category" | "name";
+type SortDirection = "asc" | "desc";
 
 function filterExpensesByDate(expenses: Expense[], filter: DateFilter): Expense[] {
   if (filter === "all") return expenses;
@@ -123,6 +129,43 @@ function filterExpensesByDate(expenses: Expense[], filter: DateFilter): Expense[
   }
   
   return expenses;
+}
+
+function sortExpenses(expenses: Expense[], field: SortField, direction: SortDirection): Expense[] {
+  return [...expenses].sort((a, b) => {
+    let comparison = 0;
+    
+    switch (field) {
+      case "date":
+        try {
+          const dateA = parseISO(a.date);
+          const dateB = parseISO(b.date);
+          comparison = dateA.getTime() - dateB.getTime();
+        } catch {
+          comparison = a.date.localeCompare(b.date);
+        }
+        break;
+      case "amount":
+        comparison = a.amount - b.amount;
+        break;
+      case "category":
+        comparison = a.category.localeCompare(b.category);
+        break;
+      case "name":
+        comparison = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+        break;
+    }
+    
+    return direction === "asc" ? comparison : -comparison;
+  });
+}
+
+function filterExpensesBySearch(expenses: Expense[], query: string): Expense[] {
+  if (!query.trim()) return expenses;
+  const lowerQuery = query.toLowerCase().trim();
+  return expenses.filter(expense => 
+    expense.name.toLowerCase().includes(lowerQuery)
+  );
 }
 
 type BudgetFormValues = z.infer<typeof budgetFormSchema>;
@@ -819,9 +862,32 @@ function ExpensesList({
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortField, setSortField] = useState<SortField>("date");
+  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
-  const filteredExpenses = filterExpensesByDate(expenses, dateFilter);
+  const dateFilteredExpenses = filterExpensesByDate(expenses, dateFilter);
+  const searchFilteredExpenses = filterExpensesBySearch(dateFilteredExpenses, searchQuery);
+  const filteredExpenses = sortExpenses(searchFilteredExpenses, sortField, sortDirection);
   const filteredTotal = filteredExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+
+  const handleSortChange = (field: SortField) => {
+    if (field === sortField) {
+      setSortDirection(prev => prev === "asc" ? "desc" : "asc");
+    } else {
+      setSortField(field);
+    }
+  };
+
+  const getSortLabel = (field: SortField): string => {
+    const labels: Record<SortField, string> = {
+      date: "Date",
+      amount: "Amount",
+      category: "Category",
+      name: "Name",
+    };
+    return labels[field];
+  };
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -876,39 +942,82 @@ function ExpensesList({
     <>
       <Card>
         <CardHeader className="pb-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Receipt className="h-5 w-5" />
-              Expenses ({filteredExpenses.length})
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <Button
-                variant={dateFilter === "all" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setDateFilter("all")}
-                data-testid="button-filter-all"
-                className="toggle-elevate"
-              >
-                All Time
-              </Button>
-              <Button
-                variant={dateFilter === "month" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setDateFilter("month")}
-                data-testid="button-filter-month"
-                className="toggle-elevate"
-              >
-                This Month
-              </Button>
-              <Button
-                variant={dateFilter === "week" ? "default" : "outline"}
-                size="sm"
-                onClick={() => setDateFilter("week")}
-                data-testid="button-filter-week"
-                className="toggle-elevate"
-              >
-                This Week
-              </Button>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Receipt className="h-5 w-5" />
+                Expenses ({filteredExpenses.length})
+              </CardTitle>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button
+                  variant={dateFilter === "all" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setDateFilter("all")}
+                  data-testid="button-filter-all"
+                  className="toggle-elevate"
+                >
+                  All Time
+                </Button>
+                <Button
+                  variant={dateFilter === "month" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setDateFilter("month")}
+                  data-testid="button-filter-month"
+                  className="toggle-elevate"
+                >
+                  This Month
+                </Button>
+                <Button
+                  variant={dateFilter === "week" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setDateFilter("week")}
+                  data-testid="button-filter-week"
+                  className="toggle-elevate"
+                >
+                  This Week
+                </Button>
+              </div>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-3">
+              <div className="relative flex-1">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  type="text"
+                  placeholder="Search expenses..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                  data-testid="input-search-expenses"
+                />
+              </div>
+              
+              <div className="flex items-center gap-2">
+                <Select value={sortField} onValueChange={(value) => handleSortChange(value as SortField)}>
+                  <SelectTrigger className="w-[140px]" data-testid="select-sort-field">
+                    <ArrowUpDown className="h-4 w-4 mr-2" />
+                    <SelectValue placeholder="Sort by" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="date">Date</SelectItem>
+                    <SelectItem value="amount">Amount</SelectItem>
+                    <SelectItem value="category">Category</SelectItem>
+                    <SelectItem value="name">Name</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setSortDirection(prev => prev === "asc" ? "desc" : "asc")}
+                  data-testid="button-toggle-sort-direction"
+                >
+                  {sortDirection === "asc" ? (
+                    <ArrowUp className="h-4 w-4" />
+                  ) : (
+                    <ArrowDown className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </CardHeader>
@@ -917,12 +1026,18 @@ function ExpensesList({
             <div className="text-center py-8">
               <Receipt className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium mb-2">
-                {expenses.length === 0 ? "No Expenses Yet" : "No Expenses in This Period"}
+                {expenses.length === 0 
+                  ? "No Expenses Yet" 
+                  : searchQuery.trim() 
+                    ? "No Matching Expenses" 
+                    : "No Expenses in This Period"}
               </h3>
               <p className="text-muted-foreground text-sm">
                 {expenses.length === 0 
                   ? "Add your first expense to start tracking your marketing spend"
-                  : "Try selecting a different time period to view expenses"
+                  : searchQuery.trim()
+                    ? "Try adjusting your search terms or filters"
+                    : "Try selecting a different time period to view expenses"
                 }
               </p>
             </div>
