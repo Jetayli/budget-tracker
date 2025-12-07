@@ -60,7 +60,8 @@ import {
   Search,
   ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Download
 } from "lucide-react";
 import { format, isWithinInterval, startOfWeek, endOfWeek, startOfMonth, endOfMonth, parseISO } from "date-fns";
 
@@ -166,6 +167,38 @@ function filterExpensesBySearch(expenses: Expense[], query: string): Expense[] {
   return expenses.filter(expense => 
     expense.name.toLowerCase().includes(lowerQuery)
   );
+}
+
+function exportToCSV(expenses: Expense[]): void {
+  if (expenses.length === 0) return;
+  
+  const headers = ["Name", "Amount", "Category", "Date"];
+  const csvRows = [
+    headers.join(","),
+    ...expenses.map(expense => {
+      const escapedName = expense.name.includes(",") || expense.name.includes('"')
+        ? `"${expense.name.replace(/"/g, '""')}"`
+        : expense.name;
+      return [
+        escapedName,
+        expense.amount.toFixed(2),
+        expense.category,
+        expense.date
+      ].join(",");
+    })
+  ];
+  
+  const csvContent = csvRows.join("\n");
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  
+  const link = document.createElement("a");
+  link.setAttribute("href", url);
+  link.setAttribute("download", `expenses_${format(new Date(), "yyyy-MM-dd")}.csv`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }
 
 type BudgetFormValues = z.infer<typeof budgetFormSchema>;
@@ -1016,6 +1049,16 @@ function ExpensesList({
                   ) : (
                     <ArrowDown className="h-4 w-4" />
                   )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => exportToCSV(filteredExpenses)}
+                  disabled={filteredExpenses.length === 0}
+                  data-testid="button-export-csv"
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  Export
                 </Button>
               </div>
             </div>
