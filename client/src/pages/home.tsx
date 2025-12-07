@@ -15,7 +15,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import {
   Form,
   FormControl,
@@ -68,14 +67,16 @@ import {
   ChevronRight,
   Layers,
   Receipt,
-  Target
+  Target,
+  FolderOpen,
+  FolderPlus
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
-type BudgetWithSpent = Budget & { totalSpent: number };
+type ProjectWithSpent = Budget & { totalSpent: number };
 
-const budgetFormSchema = z.object({
-  name: z.string().optional(),
+const projectFormSchema = z.object({
+  name: z.string().min(1, "Project name is required"),
   totalBudget: z.coerce.number().min(0.01, "Budget must be greater than 0"),
 });
 
@@ -98,7 +99,7 @@ const spendEntryFormSchema = z.object({
   subcategoryId: z.string().optional().nullable(),
 });
 
-type BudgetFormValues = z.infer<typeof budgetFormSchema>;
+type ProjectFormValues = z.infer<typeof projectFormSchema>;
 type CategoryFormValues = z.infer<typeof categoryFormSchema>;
 type SubcategoryFormValues = z.infer<typeof subcategoryFormSchema>;
 type SpendEntryFormValues = z.infer<typeof spendEntryFormSchema>;
@@ -146,29 +147,29 @@ function getStatusBadge(percentUsed: number) {
   return <Badge className="bg-green-500/20 text-green-700 dark:text-green-300 border-green-500/30 text-xs">Under 50%</Badge>;
 }
 
-function BudgetSetupDialog({ onSuccess }: { onSuccess: () => void }) {
+function CreateProjectDialog({ onSuccess }: { onSuccess: (projectId: string) => void }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   
-  const form = useForm<BudgetFormValues>({
-    resolver: zodResolver(budgetFormSchema),
+  const form = useForm<ProjectFormValues>({
+    resolver: zodResolver(projectFormSchema),
     defaultValues: {
-      name: "Marketing Budget",
+      name: "",
       totalBudget: undefined as unknown as number,
     },
   });
 
   const mutation = useMutation({
-    mutationFn: async (data: BudgetFormValues) => {
-      const res = await apiRequest("POST", "/api/budget", data);
+    mutationFn: async (data: ProjectFormValues) => {
+      const res = await apiRequest("POST", "/api/projects", data);
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/budget"] });
-      toast({ title: "Budget Set", description: "Your marketing budget has been configured." });
+    onSuccess: (data: ProjectWithSpent) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({ title: "Project Created", description: "Your new project has been created." });
       setOpen(false);
       form.reset();
-      onSuccess();
+      onSuccess(data.id);
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -178,14 +179,14 @@ function BudgetSetupDialog({ onSuccess }: { onSuccess: () => void }) {
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="lg" data-testid="button-set-budget">
-          <Wallet className="h-4 w-4 mr-2" />
-          Set Marketing Budget
+        <Button data-testid="button-create-project">
+          <FolderPlus className="h-4 w-4 mr-2" />
+          New Project
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Set Your Marketing Budget</DialogTitle>
+          <DialogTitle>Create New Project</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
@@ -194,9 +195,9 @@ function BudgetSetupDialog({ onSuccess }: { onSuccess: () => void }) {
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Budget Name</FormLabel>
+                  <FormLabel>Project Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Marketing Budget" data-testid="input-budget-name" {...field} />
+                    <Input placeholder="e.g., Q1 Marketing Campaign" data-testid="input-project-name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -217,7 +218,7 @@ function BudgetSetupDialog({ onSuccess }: { onSuccess: () => void }) {
                         min="0"
                         placeholder="6000"
                         className="pl-12 tabular-nums"
-                        data-testid="input-budget-amount"
+                        data-testid="input-project-budget"
                         {...field}
                       />
                     </div>
@@ -230,8 +231,8 @@ function BudgetSetupDialog({ onSuccess }: { onSuccess: () => void }) {
               <DialogClose asChild>
                 <Button type="button" variant="ghost">Cancel</Button>
               </DialogClose>
-              <Button type="submit" disabled={mutation.isPending} data-testid="button-save-budget">
-                {mutation.isPending ? "Saving..." : "Set Budget"}
+              <Button type="submit" disabled={mutation.isPending} data-testid="button-save-project">
+                {mutation.isPending ? "Creating..." : "Create Project"}
               </Button>
             </DialogFooter>
           </form>
@@ -241,42 +242,43 @@ function BudgetSetupDialog({ onSuccess }: { onSuccess: () => void }) {
   );
 }
 
-function EditBudgetDialog({ 
-  budget, 
+function EditProjectDialog({ 
+  project, 
   open, 
   onOpenChange 
 }: { 
-  budget: BudgetWithSpent;
+  project: ProjectWithSpent;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
   const { toast } = useToast();
   
-  const form = useForm<BudgetFormValues>({
-    resolver: zodResolver(budgetFormSchema),
+  const form = useForm<ProjectFormValues>({
+    resolver: zodResolver(projectFormSchema),
     defaultValues: {
-      name: budget.name || "Marketing Budget",
-      totalBudget: budget.totalBudget,
+      name: project.name || "",
+      totalBudget: project.totalBudget,
     },
   });
 
   useEffect(() => {
     if (open) {
       form.reset({
-        name: budget.name || "Marketing Budget",
-        totalBudget: budget.totalBudget,
+        name: project.name || "",
+        totalBudget: project.totalBudget,
       });
     }
-  }, [budget, open, form]);
+  }, [project, open, form]);
 
   const mutation = useMutation({
-    mutationFn: async (data: BudgetFormValues) => {
-      const res = await apiRequest("POST", "/api/budget", data);
+    mutationFn: async (data: ProjectFormValues) => {
+      const res = await apiRequest("PATCH", `/api/projects/${project.id}`, data);
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/budget"] });
-      toast({ title: "Budget Updated", description: "Your budget has been updated." });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id] });
+      toast({ title: "Project Updated", description: "Your project has been updated." });
       onOpenChange(false);
     },
     onError: (error: Error) => {
@@ -288,7 +290,7 @@ function EditBudgetDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Edit Marketing Budget</DialogTitle>
+          <DialogTitle>Edit Project</DialogTitle>
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
@@ -297,9 +299,9 @@ function EditBudgetDialog({
               name="name"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Budget Name</FormLabel>
+                  <FormLabel>Project Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="Marketing Budget" data-testid="input-edit-budget-name" {...field} />
+                    <Input placeholder="Project Name" data-testid="input-edit-project-name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -319,7 +321,7 @@ function EditBudgetDialog({
                         step="1"
                         min="0"
                         className="pl-12 tabular-nums"
-                        data-testid="input-edit-budget-amount"
+                        data-testid="input-edit-project-budget"
                         {...field}
                       />
                     </div>
@@ -332,8 +334,8 @@ function EditBudgetDialog({
               <DialogClose asChild>
                 <Button type="button" variant="ghost">Cancel</Button>
               </DialogClose>
-              <Button type="submit" disabled={mutation.isPending} data-testid="button-update-budget">
-                {mutation.isPending ? "Saving..." : "Update Budget"}
+              <Button type="submit" disabled={mutation.isPending} data-testid="button-update-project">
+                {mutation.isPending ? "Saving..." : "Update Project"}
               </Button>
             </DialogFooter>
           </form>
@@ -343,7 +345,120 @@ function EditBudgetDialog({
   );
 }
 
-function BudgetOverview({ budget, isLoading }: { budget: BudgetWithSpent | null; isLoading: boolean }) {
+function ProjectSelector({ 
+  projects, 
+  selectedProjectId, 
+  onSelectProject,
+  onProjectDeleted,
+  isLoading 
+}: { 
+  projects: ProjectWithSpent[];
+  selectedProjectId: string | null;
+  onSelectProject: (id: string) => void;
+  onProjectDeleted: (deletedId: string) => void;
+  isLoading: boolean;
+}) {
+  const { toast } = useToast();
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/projects/${id}`);
+      return id;
+    },
+    onSuccess: (deletedId: string) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({ title: "Project Deleted", description: "Project and all its data have been removed." });
+      onProjectDeleted(deletedId);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  if (isLoading) {
+    return (
+      <div className="space-y-2">
+        <Skeleton className="h-10 w-full" />
+        <Skeleton className="h-10 w-full" />
+      </div>
+    );
+  }
+
+  if (projects.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2">
+      {projects.map((project) => {
+        const percentUsed = project.totalBudget > 0 ? (project.totalSpent / project.totalBudget) * 100 : 0;
+        const isSelected = project.id === selectedProjectId;
+        
+        return (
+          <div 
+            key={project.id}
+            className={`p-3 rounded-md cursor-pointer transition-colors ${
+              isSelected 
+                ? "bg-primary/10 border border-primary/30" 
+                : "bg-muted/30 hover-elevate"
+            }`}
+            onClick={() => onSelectProject(project.id)}
+            data-testid={`card-project-${project.id}`}
+          >
+            <div className="flex items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <FolderOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+                <span className="font-medium truncate">{project.name || "Untitled Project"}</span>
+              </div>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button 
+                    size="icon" 
+                    variant="ghost" 
+                    className="shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                    data-testid={`button-delete-project-${project.id}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Project</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete "{project.name}"? This will permanently delete all categories, subcategories, and spend entries associated with this project.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction 
+                      onClick={() => deleteMutation.mutate(project.id)}
+                      data-testid={`button-confirm-delete-project-${project.id}`}
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground tabular-nums">{formatCurrency(project.totalSpent)} / {formatCurrency(project.totalBudget)}</span>
+              <span className={`text-xs font-medium tabular-nums ${getStatusColor(percentUsed)}`}>{Math.round(percentUsed)}%</span>
+            </div>
+            <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted mt-1">
+              <div
+                className={`h-full transition-all duration-300 ease-out ${getProgressColor(percentUsed)}`}
+                style={{ width: `${Math.min(percentUsed, 100)}%` }}
+              />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function ProjectOverview({ project, isLoading }: { project: ProjectWithSpent | null; isLoading: boolean }) {
   const [editOpen, setEditOpen] = useState(false);
 
   if (isLoading) {
@@ -360,21 +475,12 @@ function BudgetOverview({ budget, isLoading }: { budget: BudgetWithSpent | null;
     );
   }
 
-  if (!budget) {
-    return (
-      <Card>
-        <CardContent className="p-8 text-center">
-          <Wallet className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-          <h3 className="text-lg font-semibold mb-2">No Budget Set</h3>
-          <p className="text-muted-foreground mb-6">Start by setting your total marketing budget</p>
-          <BudgetSetupDialog onSuccess={() => {}} />
-        </CardContent>
-      </Card>
-    );
+  if (!project) {
+    return null;
   }
 
-  const remaining = budget.totalBudget - budget.totalSpent;
-  const percentUsed = budget.totalBudget > 0 ? (budget.totalSpent / budget.totalBudget) * 100 : 0;
+  const remaining = project.totalBudget - project.totalSpent;
+  const percentUsed = project.totalBudget > 0 ? (project.totalSpent / project.totalBudget) * 100 : 0;
 
   return (
     <>
@@ -382,9 +488,9 @@ function BudgetOverview({ budget, isLoading }: { budget: BudgetWithSpent | null;
         <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
           <CardTitle className="flex items-center gap-2">
             <Target className="h-5 w-5" />
-            {budget.name || "Marketing Budget"}
+            {project.name || "Project Budget"}
           </CardTitle>
-          <Button size="icon" variant="ghost" onClick={() => setEditOpen(true)} data-testid="button-edit-budget">
+          <Button size="icon" variant="ghost" onClick={() => setEditOpen(true)} data-testid="button-edit-project">
             <Pencil className="h-4 w-4" />
           </Button>
         </CardHeader>
@@ -396,7 +502,7 @@ function BudgetOverview({ budget, isLoading }: { budget: BudgetWithSpent | null;
                 Total Budget
               </p>
               <p className="text-2xl font-bold tabular-nums" data-testid="text-total-budget">
-                {formatCurrency(budget.totalBudget)}
+                {formatCurrency(project.totalBudget)}
               </p>
             </div>
             <div className="space-y-1">
@@ -405,7 +511,7 @@ function BudgetOverview({ budget, isLoading }: { budget: BudgetWithSpent | null;
                 Total Spent
               </p>
               <p className="text-2xl font-bold tabular-nums" data-testid="text-total-spent">
-                {formatCurrency(budget.totalSpent)}
+                {formatCurrency(project.totalSpent)}
               </p>
             </div>
             <div className="space-y-1">
@@ -436,12 +542,12 @@ function BudgetOverview({ budget, isLoading }: { budget: BudgetWithSpent | null;
           </div>
         </CardContent>
       </Card>
-      <EditBudgetDialog budget={budget} open={editOpen} onOpenChange={setEditOpen} />
+      <EditProjectDialog project={project} open={editOpen} onOpenChange={setEditOpen} />
     </>
   );
 }
 
-function AddCategoryDialog({ onSuccess }: { onSuccess: () => void }) {
+function AddCategoryDialog({ projectId, onSuccess }: { projectId: string; onSuccess: () => void }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   
@@ -455,12 +561,12 @@ function AddCategoryDialog({ onSuccess }: { onSuccess: () => void }) {
 
   const mutation = useMutation({
     mutationFn: async (data: CategoryFormValues) => {
-      const res = await apiRequest("POST", "/api/categories", data);
+      const res = await apiRequest("POST", `/api/projects/${projectId}/categories`, data);
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/budget"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       toast({ title: "Category Added", description: "Your category has been created." });
       setOpen(false);
       form.reset();
@@ -540,11 +646,13 @@ function AddCategoryDialog({ onSuccess }: { onSuccess: () => void }) {
 function EditCategoryDialog({ 
   category, 
   open, 
-  onOpenChange 
+  onOpenChange,
+  projectId
 }: { 
   category: CategoryWithSpent | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  projectId: string;
 }) {
   const { toast } = useToast();
   
@@ -571,7 +679,7 @@ function EditCategoryDialog({
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
       toast({ title: "Category Updated", description: "Category has been updated." });
       onOpenChange(false);
     },
@@ -637,10 +745,12 @@ function EditCategoryDialog({
 function AddSubcategoryDialog({ 
   categoryId, 
   categoryName,
+  projectId,
   onSuccess 
 }: { 
   categoryId: string;
   categoryName: string;
+  projectId: string;
   onSuccess: () => void;
 }) {
   const { toast } = useToast();
@@ -666,7 +776,7 @@ function AddSubcategoryDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/categories", categoryId, "subcategories"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
       toast({ title: "Platform Added", description: "Platform has been added to the category." });
       setOpen(false);
       form.reset({ name: "", allocatedBudget: undefined as unknown as number, categoryId });
@@ -680,7 +790,7 @@ function AddSubcategoryDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" data-testid={`button-add-subcategory-${categoryId}`}>
+        <Button variant="ghost" size="sm" data-testid={`button-add-subcategory-${categoryId}`}>
           <Plus className="h-3 w-3 mr-1" />
           Add Platform
         </Button>
@@ -698,7 +808,7 @@ function AddSubcategoryDialog({
                 <FormItem>
                   <FormLabel>Platform Name</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Instagram, Snapchat, X" data-testid="input-subcategory-name" {...field} />
+                    <Input placeholder="e.g., Instagram, Facebook, TikTok" data-testid="input-subcategory-name" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -713,7 +823,15 @@ function AddSubcategoryDialog({
                   <FormControl>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">SAR</span>
-                      <Input type="number" step="1" min="0" placeholder="500" className="pl-12 tabular-nums" data-testid="input-subcategory-budget" {...field} />
+                      <Input
+                        type="number"
+                        step="1"
+                        min="0"
+                        placeholder="500"
+                        className="pl-12 tabular-nums"
+                        data-testid="input-subcategory-budget"
+                        {...field}
+                      />
                     </div>
                   </FormControl>
                   <FormMessage />
@@ -735,24 +853,135 @@ function AddSubcategoryDialog({
   );
 }
 
+function EditSubcategoryDialog({ 
+  subcategory, 
+  categoryId,
+  projectId,
+  open, 
+  onOpenChange 
+}: { 
+  subcategory: SubcategoryWithSpent | null;
+  categoryId: string;
+  projectId: string;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { toast } = useToast();
+  
+  const form = useForm<SubcategoryFormValues>({
+    resolver: zodResolver(subcategoryFormSchema),
+    defaultValues: {
+      name: "",
+      allocatedBudget: 0,
+      categoryId: categoryId,
+    },
+  });
+
+  useEffect(() => {
+    if (subcategory && open) {
+      form.reset({
+        name: subcategory.name,
+        allocatedBudget: subcategory.allocatedBudget,
+        categoryId: categoryId,
+      });
+    }
+  }, [subcategory, open, form, categoryId]);
+
+  const mutation = useMutation({
+    mutationFn: async (data: SubcategoryFormValues) => {
+      const res = await apiRequest("PATCH", `/api/subcategories/${subcategory?.id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/categories", categoryId, "subcategories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
+      toast({ title: "Platform Updated", description: "Platform has been updated." });
+      onOpenChange(false);
+    },
+    onError: (error: Error) => {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    },
+  });
+
+  if (!subcategory) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit Platform</DialogTitle>
+        </DialogHeader>
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Platform Name</FormLabel>
+                  <FormControl>
+                    <Input data-testid="input-edit-subcategory-name" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <FormField
+              control={form.control}
+              name="allocatedBudget"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Allocated Budget (SAR)</FormLabel>
+                  <FormControl>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">SAR</span>
+                      <Input type="number" step="1" min="0" className="pl-12 tabular-nums" data-testid="input-edit-subcategory-budget" {...field} />
+                    </div>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <DialogFooter>
+              <DialogClose asChild>
+                <Button type="button" variant="ghost">Cancel</Button>
+              </DialogClose>
+              <Button type="submit" disabled={mutation.isPending} data-testid="button-update-subcategory">
+                {mutation.isPending ? "Saving..." : "Update Platform"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </Form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 function SubcategoryRow({ 
-  subcategory,
+  subcategory, 
+  categoryId,
+  projectId,
   onDelete 
 }: { 
   subcategory: SubcategoryWithSpent;
+  categoryId: string;
+  projectId: string;
   onDelete: () => void;
 }) {
   const { toast } = useToast();
-  const remaining = subcategory.allocatedBudget - subcategory.spent;
-  const percentUsed = subcategory.allocatedBudget > 0 ? (subcategory.spent / subcategory.allocatedBudget) * 100 : 0;
+  const [editOpen, setEditOpen] = useState(false);
+  
+  const percentUsed = subcategory.allocatedBudget > 0 
+    ? (subcategory.spent / subcategory.allocatedBudget) * 100 
+    : 0;
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("DELETE", `/api/subcategories/${subcategory.id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/categories", subcategory.categoryId, "subcategories"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/categories", categoryId, "subcategories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
       toast({ title: "Platform Deleted", description: "Platform has been removed." });
       onDelete();
     },
@@ -762,63 +991,68 @@ function SubcategoryRow({
   });
 
   return (
-    <div className="flex items-center justify-between py-2 px-3 bg-muted/30 rounded-md" data-testid={`row-subcategory-${subcategory.id}`}>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="font-medium text-sm truncate">{subcategory.name}</span>
-          {getStatusBadge(percentUsed)}
+    <>
+      <div 
+        className="flex items-center justify-between py-2 px-3 bg-muted/20 rounded-md"
+        data-testid={`row-subcategory-${subcategory.id}`}
+      >
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm font-medium truncate">{subcategory.name}</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <span className="tabular-nums">{formatCurrency(subcategory.spent)} / {formatCurrency(subcategory.allocatedBudget)}</span>
+            <span className={`font-medium tabular-nums ${getStatusColor(percentUsed)}`}>({Math.round(percentUsed)}%)</span>
+          </div>
         </div>
-        <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
-          <span>Budget: {formatCurrency(subcategory.allocatedBudget)}</span>
-          <span>Spent: {formatCurrency(subcategory.spent)}</span>
-          <span className={getStatusColor(percentUsed)}>Left: {formatCurrency(remaining)}</span>
-        </div>
-        <div className="mt-1 h-1.5 bg-muted rounded-full overflow-hidden">
-          <div 
-            className={`h-full transition-all ${getProgressColor(percentUsed)}`}
-            style={{ width: `${Math.min(percentUsed, 100)}%` }}
-          />
+        <div className="flex items-center gap-1 shrink-0">
+          <Button size="icon" variant="ghost" onClick={() => setEditOpen(true)} data-testid={`button-edit-subcategory-${subcategory.id}`}>
+            <Pencil className="h-3 w-3" />
+          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button size="icon" variant="ghost" data-testid={`button-delete-subcategory-${subcategory.id}`}>
+                <Trash2 className="h-3 w-3" />
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Platform</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete "{subcategory.name}"? This will not delete spend entries but they will no longer be associated with this platform.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => deleteMutation.mutate()}>Delete</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
-      <AlertDialog>
-        <AlertDialogTrigger asChild>
-          <Button size="icon" variant="ghost" className="ml-2 shrink-0" data-testid={`button-delete-subcategory-${subcategory.id}`}>
-            <Trash2 className="h-4 w-4" />
-          </Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Platform</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete "{subcategory.name}"? This will also delete all spend entries for this platform.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={() => deleteMutation.mutate()}>Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
+      <EditSubcategoryDialog 
+        subcategory={subcategory} 
+        categoryId={categoryId}
+        projectId={projectId}
+        open={editOpen} 
+        onOpenChange={setEditOpen} 
+      />
+    </>
   );
 }
 
-function CategoryCard({ category }: { category: CategoryWithSpent }) {
+function CategoryCard({ category, projectId }: { category: CategoryWithSpent; projectId: string }) {
   const { toast } = useToast();
-  const [isOpen, setIsOpen] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   
-  const remaining = category.allocatedBudget - category.spent;
-  const percentUsed = category.allocatedBudget > 0 ? (category.spent / category.allocatedBudget) * 100 : 0;
+  const percentUsed = category.allocatedBudget > 0 
+    ? (category.spent / category.allocatedBudget) * 100 
+    : 0;
 
   const { data: subcategories = [], isLoading: subcategoriesLoading } = useQuery<SubcategoryWithSpent[]>({
     queryKey: ["/api/categories", category.id, "subcategories"],
-    queryFn: async () => {
-      const res = await fetch(`/api/categories/${category.id}/subcategories`);
-      if (!res.ok) throw new Error("Failed to fetch subcategories");
-      return res.json();
-    },
-    enabled: isOpen,
+    enabled: isExpanded,
   });
 
   const deleteMutation = useMutation({
@@ -826,9 +1060,9 @@ function CategoryCard({ category }: { category: CategoryWithSpent }) {
       await apiRequest("DELETE", `/api/categories/${category.id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/budget"] });
-      toast({ title: "Category Deleted", description: "Category and all its data have been removed." });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
+      toast({ title: "Category Deleted", description: "Category and its platforms have been removed." });
     },
     onError: (error: Error) => {
       toast({ title: "Error", description: error.message, variant: "destructive" });
@@ -838,20 +1072,18 @@ function CategoryCard({ category }: { category: CategoryWithSpent }) {
   return (
     <>
       <Card data-testid={`card-category-${category.id}`}>
-        <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-2">
               <CollapsibleTrigger asChild>
-                <Button variant="ghost" className="p-0 h-auto hover:bg-transparent justify-start flex-1" data-testid={`button-expand-category-${category.id}`}>
-                  <div className="flex items-center gap-2">
-                    {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    <Layers className="h-5 w-5 text-muted-foreground" />
-                    <span className="font-semibold">{category.name}</span>
+                <Button variant="ghost" className="p-0 h-auto hover:bg-transparent justify-start flex-1 min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isExpanded ? <ChevronDown className="h-4 w-4 shrink-0" /> : <ChevronRight className="h-4 w-4 shrink-0" />}
+                    <CardTitle className="text-base truncate">{category.name}</CardTitle>
                   </div>
                 </Button>
               </CollapsibleTrigger>
               <div className="flex items-center gap-1 shrink-0">
-                {getStatusBadge(percentUsed)}
                 <Button size="icon" variant="ghost" onClick={() => setEditOpen(true)} data-testid={`button-edit-category-${category.id}`}>
                   <Pencil className="h-4 w-4" />
                 </Button>
@@ -865,7 +1097,7 @@ function CategoryCard({ category }: { category: CategoryWithSpent }) {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Delete Category</AlertDialogTitle>
                       <AlertDialogDescription>
-                        Are you sure you want to delete "{category.name}"? This will delete all platforms and spend entries in this category.
+                        Are you sure you want to delete "{category.name}"? This will also delete all platforms under this category.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -878,79 +1110,92 @@ function CategoryCard({ category }: { category: CategoryWithSpent }) {
             </div>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="grid grid-cols-3 gap-4 mb-3 text-sm">
-              <div>
-                <p className="text-muted-foreground text-xs">Budget</p>
-                <p className="font-medium tabular-nums">{formatCurrency(category.allocatedBudget)}</p>
+            <div className="space-y-3">
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">Spent / Allocated</span>
+                <span className="font-medium tabular-nums">
+                  {formatCurrency(category.spent)} / {formatCurrency(category.allocatedBudget)}
+                </span>
               </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Spent</p>
-                <p className="font-medium tabular-nums">{formatCurrency(category.spent)}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Remaining</p>
-                <p className={`font-medium tabular-nums ${getStatusColor(percentUsed)}`}>{formatCurrency(remaining)}</p>
-              </div>
-            </div>
-            
-            <div className="space-y-1 mb-3">
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">{Math.round(percentUsed)}% used</span>
-              </div>
-              <div className="h-2 bg-muted rounded-full overflow-hidden">
-                <div 
-                  className={`h-full transition-all ${getProgressColor(percentUsed)}`}
-                  style={{ width: `${Math.min(percentUsed, 100)}%` }}
-                />
-              </div>
-            </div>
-
-            <CollapsibleContent>
-              <div className="border-t pt-3 mt-3 space-y-2">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-sm font-medium text-muted-foreground">Platforms</h4>
-                  <AddSubcategoryDialog 
-                    categoryId={category.id} 
-                    categoryName={category.name}
-                    onSuccess={() => {}} 
+              
+              <div className="space-y-1">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">Usage</span>
+                  <div className="flex items-center gap-2">
+                    <span className={`font-medium tabular-nums ${getStatusColor(percentUsed)}`}>{Math.round(percentUsed)}%</span>
+                    {getStatusBadge(percentUsed)}
+                  </div>
+                </div>
+                <div className="relative h-2 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={`h-full transition-all duration-300 ease-out ${getProgressColor(percentUsed)}`}
+                    style={{ width: `${Math.min(percentUsed, 100)}%` }}
                   />
                 </div>
-                {subcategoriesLoading ? (
-                  <div className="space-y-2">
-                    <Skeleton className="h-16 w-full" />
-                    <Skeleton className="h-16 w-full" />
-                  </div>
-                ) : subcategories.length === 0 ? (
-                  <p className="text-sm text-muted-foreground text-center py-4">
-                    No platforms yet. Add platforms to break down this category.
-                  </p>
-                ) : (
-                  <div className="space-y-2">
-                    {subcategories.map((sub) => (
-                      <SubcategoryRow key={sub.id} subcategory={sub} onDelete={() => {}} />
-                    ))}
-                  </div>
-                )}
               </div>
-            </CollapsibleContent>
+
+              <CollapsibleContent>
+                <div className="pt-3 space-y-3 border-t">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium text-muted-foreground">Platforms</span>
+                    <AddSubcategoryDialog 
+                      categoryId={category.id} 
+                      categoryName={category.name}
+                      projectId={projectId}
+                      onSuccess={() => {}} 
+                    />
+                  </div>
+                  
+                  {subcategoriesLoading ? (
+                    <div className="space-y-2">
+                      <Skeleton className="h-12 w-full" />
+                      <Skeleton className="h-12 w-full" />
+                    </div>
+                  ) : subcategories.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center py-4">
+                      No platforms yet. Add platforms like Instagram, Facebook, etc.
+                    </p>
+                  ) : (
+                    <div className="space-y-2">
+                      {subcategories.map((sub) => (
+                        <SubcategoryRow 
+                          key={sub.id} 
+                          subcategory={sub} 
+                          categoryId={category.id}
+                          projectId={projectId}
+                          onDelete={() => {}} 
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </CollapsibleContent>
+            </div>
           </CardContent>
         </Collapsible>
       </Card>
-      <EditCategoryDialog category={category} open={editOpen} onOpenChange={setEditOpen} />
+      <EditCategoryDialog 
+        category={category} 
+        open={editOpen} 
+        onOpenChange={setEditOpen}
+        projectId={projectId}
+      />
     </>
   );
 }
 
 function AddSpendEntryDialog({ 
   categories,
+  projectId,
   onSuccess 
 }: { 
   categories: CategoryWithSpent[];
+  projectId: string;
   onSuccess: () => void;
 }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string>("");
+  const [selectedCategoryId, setSelectedCategoryId] = useState("");
   
   const form = useForm<SpendEntryFormValues>({
     resolver: zodResolver(spendEntryFormSchema),
@@ -965,11 +1210,6 @@ function AddSpendEntryDialog({
 
   const { data: subcategories = [] } = useQuery<SubcategoryWithSpent[]>({
     queryKey: ["/api/categories", selectedCategoryId, "subcategories"],
-    queryFn: async () => {
-      const res = await fetch(`/api/categories/${selectedCategoryId}/subcategories`);
-      if (!res.ok) throw new Error("Failed to fetch subcategories");
-      return res.json();
-    },
     enabled: !!selectedCategoryId,
   });
 
@@ -983,9 +1223,9 @@ function AddSpendEntryDialog({
       return res.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/spend-entries"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/budget"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "spend-entries"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       toast({ title: "Spend Logged", description: "Your spend entry has been recorded." });
       setOpen(false);
       form.reset({ amount: undefined as unknown as number, description: "", date: getTodayDateString(), categoryId: "", subcategoryId: null });
@@ -1121,11 +1361,11 @@ function AddSpendEntryDialog({
   );
 }
 
-function SpendEntriesList({ categories }: { categories: CategoryWithSpent[] }) {
+function SpendEntriesList({ categories, projectId }: { categories: CategoryWithSpent[]; projectId: string }) {
   const { toast } = useToast();
   
   const { data: entries = [], isLoading } = useQuery<SpendEntry[]>({
-    queryKey: ["/api/spend-entries"],
+    queryKey: ["/api/projects", projectId, "spend-entries"],
   });
 
   const deleteMutation = useMutation({
@@ -1133,9 +1373,9 @@ function SpendEntriesList({ categories }: { categories: CategoryWithSpent[] }) {
       await apiRequest("DELETE", `/api/spend-entries/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/spend-entries"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/categories"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/budget"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "spend-entries"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "categories"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       toast({ title: "Entry Deleted", description: "Spend entry has been removed." });
     },
     onError: (error: Error) => {
@@ -1171,7 +1411,7 @@ function SpendEntriesList({ categories }: { categories: CategoryWithSpent[] }) {
           <Receipt className="h-5 w-5" />
           Recent Spend Entries
         </CardTitle>
-        <AddSpendEntryDialog categories={categories} onSuccess={() => {}} />
+        <AddSpendEntryDialog categories={categories} projectId={projectId} onSuccess={() => {}} />
       </CardHeader>
       <CardContent>
         {entries.length === 0 ? (
@@ -1187,7 +1427,7 @@ function SpendEntriesList({ categories }: { categories: CategoryWithSpent[] }) {
                 data-testid={`row-spend-entry-${entry.id}`}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className="font-medium truncate">{entry.description}</span>
                     <Badge variant="outline" className="text-xs shrink-0">{getCategoryName(entry.categoryId)}</Badge>
                   </div>
@@ -1225,59 +1465,135 @@ function SpendEntriesList({ categories }: { categories: CategoryWithSpent[] }) {
 }
 
 export default function Home() {
-  const { data: budget, isLoading: budgetLoading } = useQuery<BudgetWithSpent | null>({
-    queryKey: ["/api/budget"],
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+
+  const { data: projects = [], isLoading: projectsLoading } = useQuery<ProjectWithSpent[]>({
+    queryKey: ["/api/projects"],
   });
 
+  const selectedProject = projects.find(p => p.id === selectedProjectId) || null;
+
   const { data: categories = [], isLoading: categoriesLoading } = useQuery<CategoryWithSpent[]>({
-    queryKey: ["/api/categories"],
+    queryKey: ["/api/projects", selectedProjectId, "categories"],
+    enabled: !!selectedProjectId,
   });
+
+  useEffect(() => {
+    if (projects.length > 0 && !selectedProjectId) {
+      setSelectedProjectId(projects[0].id);
+    }
+    if (selectedProjectId && !projects.find(p => p.id === selectedProjectId)) {
+      setSelectedProjectId(projects.length > 0 ? projects[0].id : null);
+    }
+  }, [projects, selectedProjectId]);
+
+  const handleProjectCreated = (projectId: string) => {
+    setSelectedProjectId(projectId);
+  };
+
+  const handleProjectDeleted = (deletedId: string) => {
+    if (selectedProjectId === deletedId) {
+      const remainingProjects = projects.filter(p => p.id !== deletedId);
+      setSelectedProjectId(remainingProjects.length > 0 ? remainingProjects[0].id : null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="container mx-auto px-4 py-8 max-w-5xl">
+      <div className="container mx-auto px-4 py-8 max-w-6xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Marketing Budget Tracker</h1>
-          <p className="text-muted-foreground">Track your marketing budgets, allocations, and actual spend in real time.</p>
+          <p className="text-muted-foreground">Track your marketing budgets, allocations, and actual spend across multiple projects.</p>
         </div>
 
-        <div className="space-y-6">
-          <BudgetOverview budget={budget ?? null} isLoading={budgetLoading} />
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="lg:col-span-1">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-2 pb-4">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <FolderOpen className="h-5 w-5" />
+                  Projects
+                </CardTitle>
+                <CreateProjectDialog onSuccess={handleProjectCreated} />
+              </CardHeader>
+              <CardContent>
+                {projectsLoading ? (
+                  <div className="space-y-2">
+                    <Skeleton className="h-16 w-full" />
+                    <Skeleton className="h-16 w-full" />
+                  </div>
+                ) : projects.length === 0 ? (
+                  <div className="text-center py-6">
+                    <FolderOpen className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
+                    <p className="text-sm text-muted-foreground mb-4">No projects yet</p>
+                    <CreateProjectDialog onSuccess={handleProjectCreated} />
+                  </div>
+                ) : (
+                  <ProjectSelector
+                    projects={projects}
+                    selectedProjectId={selectedProjectId}
+                    onSelectProject={setSelectedProjectId}
+                    onProjectDeleted={handleProjectDeleted}
+                    isLoading={projectsLoading}
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
-          {budget && (
-            <>
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">Categories</h2>
-                <AddCategoryDialog onSuccess={() => {}} />
+          <div className="lg:col-span-3">
+            {!selectedProject ? (
+              <Card>
+                <CardContent className="p-8 text-center">
+                  <Wallet className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <h3 className="text-lg font-semibold mb-2">No Project Selected</h3>
+                  <p className="text-muted-foreground mb-6">
+                    {projects.length === 0 
+                      ? "Create your first project to start tracking budgets"
+                      : "Select a project from the sidebar to view its budget details"}
+                  </p>
+                  {projects.length === 0 && (
+                    <CreateProjectDialog onSuccess={handleProjectCreated} />
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="space-y-6">
+                <ProjectOverview project={selectedProject} isLoading={false} />
+
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Categories</h2>
+                  <AddCategoryDialog projectId={selectedProject.id} onSuccess={() => {}} />
+                </div>
+
+                {categoriesLoading ? (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <Skeleton className="h-48" />
+                    <Skeleton className="h-48" />
+                  </div>
+                ) : categories.length === 0 ? (
+                  <Card>
+                    <CardContent className="p-8 text-center">
+                      <Layers className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                      <h3 className="text-lg font-semibold mb-2">No Categories Yet</h3>
+                      <p className="text-muted-foreground mb-6">
+                        Create categories to organize your budget (e.g., Social Media, Google Ads)
+                      </p>
+                      <AddCategoryDialog projectId={selectedProject.id} onSuccess={() => {}} />
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <div className="grid gap-4 md:grid-cols-2">
+                    {categories.map((category) => (
+                      <CategoryCard key={category.id} category={category} projectId={selectedProject.id} />
+                    ))}
+                  </div>
+                )}
+
+                <SpendEntriesList categories={categories} projectId={selectedProject.id} />
               </div>
-
-              {categoriesLoading ? (
-                <div className="grid gap-4 md:grid-cols-2">
-                  <Skeleton className="h-48" />
-                  <Skeleton className="h-48" />
-                </div>
-              ) : categories.length === 0 ? (
-                <Card>
-                  <CardContent className="p-8 text-center">
-                    <Layers className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
-                    <h3 className="text-lg font-semibold mb-2">No Categories Yet</h3>
-                    <p className="text-muted-foreground mb-6">
-                      Create categories to organize your budget (e.g., Social Media, Google Ads)
-                    </p>
-                    <AddCategoryDialog onSuccess={() => {}} />
-                  </CardContent>
-                </Card>
-              ) : (
-                <div className="grid gap-4 md:grid-cols-2">
-                  {categories.map((category) => (
-                    <CategoryCard key={category.id} category={category} />
-                  ))}
-                </div>
-              )}
-
-              <SpendEntriesList categories={categories} />
-            </>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>
