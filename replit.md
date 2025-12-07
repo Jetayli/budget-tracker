@@ -2,9 +2,9 @@
 
 ## Overview
 
-A utility-focused web application for tracking marketing budgets and expenses. The application allows users to set a total marketing budget and monitor individual expenses across different categories (Advertising, Social Media, Content, Events, Email Marketing, SEO, and Other). Built with a focus on clarity, efficiency, and data legibility, following Material Design principles adapted for financial data visualization.
+A utility-focused web application for tracking marketing budgets and expenses across multiple projects. The application allows users to create projects with individual budgets and monitor expenses across different categories (Advertising, Social Media, Content, Events, Email Marketing, SEO, and Other). Built with a focus on clarity, efficiency, and data legibility, following Material Design principles adapted for financial data visualization.
 
-The application provides real-time budget tracking with visual indicators (progress bars, currency displays) and supports full CRUD operations on expenses. The design emphasizes immediate data visibility and efficient data entry, making it ideal for marketing teams managing campaign budgets.
+The application provides real-time budget tracking with visual indicators (progress bars, currency displays) and supports full CRUD operations on both projects and expenses. The design emphasizes immediate data visibility and efficient data entry, making it ideal for marketing teams managing multiple campaign budgets.
 
 ## User Preferences
 
@@ -24,7 +24,7 @@ Preferred communication style: Simple, everyday language.
 **State Management**: 
 - TanStack Query (React Query) for server state management and data fetching
 - React Hook Form with Zod validation for form state and validation
-- Built-in React state for UI-specific concerns
+- Built-in React state for UI-specific concerns (selected project tracking)
 
 **Routing**: Wouter for lightweight client-side routing
 
@@ -39,11 +39,18 @@ Preferred communication style: Simple, everyday language.
 **Server Framework**: Express.js running on Node.js
 
 **API Design**: RESTful API with the following endpoints:
-- `GET /api/budget` - Retrieve current budget
-- `POST /api/budget` - Set or update budget
-- `GET /api/expenses` - List all expenses
+
+Project Endpoints:
+- `GET /api/projects` - List all projects
+- `GET /api/projects/:id` - Get single project
+- `POST /api/projects` - Create new project
+- `PATCH /api/projects/:id` - Update existing project
+- `DELETE /api/projects/:id` - Delete project (also deletes associated expenses)
+
+Expense Endpoints:
+- `GET /api/expenses` - List all expenses (optionally filtered by projectId query param)
 - `GET /api/expenses/:id` - Get single expense
-- `POST /api/expenses` - Create new expense
+- `POST /api/expenses` - Create new expense (requires projectId)
 - `PUT /api/expenses/:id` - Update existing expense
 - `DELETE /api/expenses/:id` - Delete expense
 
@@ -68,9 +75,9 @@ Preferred communication style: Simple, everyday language.
 - Database URL configuration via environment variables
 
 **Schema Design**:
-- `budgets` table: Stores total budget amount with UUID primary key
-- `expenses` table: Stores expense records with name, amount, category, and UUID primary key
-- No foreign key relationships (single budget model, independent expenses)
+- `projects` table: Stores project info with UUID primary key, name, and budgetAmount
+- `expenses` table: Stores expense records with name, amount, category, projectId reference, and UUID primary key
+- One-to-many relationship: Projects have many Expenses
 
 **Type Safety**: 
 - Shared TypeScript types generated from Drizzle schema
