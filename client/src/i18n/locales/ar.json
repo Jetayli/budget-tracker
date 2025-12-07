@@ -130,5 +130,15 @@
   "language": {
     "switchToArabic": "التحويل للعربية",
     "switchToEnglish": "التحويل للإنجليزية"
+  },
+  "export": {
+    "title": "تصدير",
+    "exportPdf": "تصدير PDF",
+    "exportExcel": "تصدير Excel",
+    "exporting": "جاري التصدير...",
+    "exportSuccess": "تم التصدير بنجاح",
+    "exportError": "فشل التصدير",
+    "metric": "المقياس",
+    "value": "القيمة"
   }
 }

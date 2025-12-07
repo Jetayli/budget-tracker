@@ -59,6 +59,12 @@ import {
 } from "@/components/ui/collapsible";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LanguageToggle } from "@/components/language-toggle";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   DollarSign, 
   Plus, 
@@ -71,9 +77,14 @@ import {
   Layers,
   Receipt,
   Target,
-  ArrowLeft
+  ArrowLeft,
+  Download,
+  FileSpreadsheet,
+  FileText
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
+import { jsPDF } from "jspdf";
+import autoTable from "jspdf-autotable";
 
 type ProjectWithSpent = Budget & { totalSpent: number };
 
@@ -1336,6 +1347,86 @@ export default function ProjectDetail() {
     );
   }
 
+  const { toast } = useToast();
+  const [isExporting, setIsExporting] = useState(false);
+
+  const handleExportExcel = async () => {
+    if (!project) return;
+    setIsExporting(true);
+    let anchor: HTMLAnchorElement | null = null;
+    let url: string | null = null;
+    try {
+      const response = await fetch(`/api/projects/${projectId}/export/excel`);
+      if (!response.ok) throw new Error("Export failed");
+      const blob = await response.blob();
+      url = window.URL.createObjectURL(blob);
+      anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = `${(project.name || "project").replace(/[^a-zA-Z0-9]/g, "_")}_budget_report.xlsx`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      toast({ title: t("export.exportSuccess") });
+    } catch (error) {
+      toast({ title: t("export.exportError"), variant: "destructive" });
+    } finally {
+      if (url) window.URL.revokeObjectURL(url);
+      if (anchor && anchor.parentNode) document.body.removeChild(anchor);
+      setIsExporting(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!project) return;
+    setIsExporting(true);
+    try {
+      const doc = new jsPDF();
+      const remaining = project.totalBudget - project.totalSpent;
+      const percentUsed = project.totalBudget > 0 ? Math.round((project.totalSpent / project.totalBudget) * 100) : 0;
+      const currencyLabel = t("currency.sar");
+
+      doc.setFontSize(18);
+      doc.text(t("home.title"), 14, 20);
+      doc.setFontSize(12);
+      doc.text(`${t("projectForm.projectName")}: ${project.name || t("project.untitled")}`, 14, 30);
+
+      autoTable(doc, {
+        startY: 40,
+        head: [[t("export.metric"), t("export.value")]],
+        body: [
+          [t("project.totalBudget"), `${currencyLabel} ${project.totalBudget.toLocaleString()}`],
+          [t("project.totalSpent"), `${currencyLabel} ${project.totalSpent.toLocaleString()}`],
+          [t("project.remaining"), `${currencyLabel} ${remaining.toLocaleString()}`],
+          [t("project.budgetUsed"), `${percentUsed}%`],
+        ],
+        theme: "striped",
+      });
+
+      if (categories.length > 0) {
+        const categoryRows = categories.map((cat) => [
+          cat.name,
+          cat.allocatedBudget.toLocaleString(),
+          cat.spent.toLocaleString(),
+          (cat.allocatedBudget - cat.spent).toLocaleString(),
+          cat.allocatedBudget > 0 ? `${Math.round((cat.spent / cat.allocatedBudget) * 100)}%` : "0%",
+        ]);
+
+        autoTable(doc, {
+          startY: (doc as any).lastAutoTable.finalY + 10,
+          head: [[t("sections.categories"), t("project.budget"), t("project.spent"), t("project.remaining"), t("project.budgetUsed")]],
+          body: categoryRows,
+          theme: "striped",
+        });
+      }
+
+      doc.save(`${(project.name || "project").replace(/[^a-zA-Z0-9]/g, "_")}_budget_report.pdf`);
+      toast({ title: t("export.exportSuccess") });
+    } catch (error) {
+      toast({ title: t("export.exportError"), variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -1348,7 +1439,27 @@ export default function ProjectDetail() {
             <ArrowLeft className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
             {t('navigation.backToProjects')}
           </Button>
-          <LanguageToggle />
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" disabled={isExporting || !project} data-testid="button-export-dropdown">
+                  <Download className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                  {isExporting ? t("export.exporting") : t("export.title")}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={handleExportPdf} data-testid="button-export-pdf">
+                  <FileText className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                  {t("export.exportPdf")}
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleExportExcel} data-testid="button-export-excel">
+                  <FileSpreadsheet className={`h-4 w-4 ${isRTL ? 'ml-2' : 'mr-2'}`} />
+                  {t("export.exportExcel")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <LanguageToggle />
+          </div>
         </div>
 
         <div className="space-y-6">

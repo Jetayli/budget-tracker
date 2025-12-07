@@ -130,5 +130,15 @@
   "language": {
     "switchToArabic": "Switch to Arabic",
     "switchToEnglish": "Switch to English"
+  },
+  "export": {
+    "title": "Export",
+    "exportPdf": "Export PDF",
+    "exportExcel": "Export Excel",
+    "exporting": "Exporting...",
+    "exportSuccess": "Export completed",
+    "exportError": "Export failed",
+    "metric": "Metric",
+    "value": "Value"
   }
 }
