@@ -29,6 +29,8 @@ export const spendEntries = pgTable("spend_entries", {
   amount: real("amount").notNull(),
   description: text("description").notNull(),
   date: text("date").notNull(),
+  startDate: text("start_date"),
+  endDate: text("end_date"),
   categoryId: varchar("category_id", { length: 36 }).notNull(),
   subcategoryId: varchar("subcategory_id", { length: 36 }),
 });

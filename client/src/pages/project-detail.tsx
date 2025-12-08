@@ -1045,6 +1045,8 @@ function AddSpendEntryDialog({
     amount: z.coerce.number().min(0.01, t('projectForm.budgetRequired')),
     description: z.string().min(1, t('spend.descriptionPlaceholder')),
     date: z.string().min(1),
+    startDate: z.string().optional().nullable(),
+    endDate: z.string().optional().nullable(),
     categoryId: z.string().min(1, t('spend.selectCategory')),
     subcategoryId: z.string().optional().nullable(),
   });
@@ -1057,6 +1059,8 @@ function AddSpendEntryDialog({
       amount: undefined as unknown as number,
       description: "",
       date: getTodayDateString(),
+      startDate: null,
+      endDate: null,
       categoryId: "",
       subcategoryId: null,
     },
@@ -1072,6 +1076,8 @@ function AddSpendEntryDialog({
       const payload = {
         ...data,
         subcategoryId: data.subcategoryId === "" || data.subcategoryId === "none" ? null : data.subcategoryId,
+        startDate: data.startDate || null,
+        endDate: data.endDate || null,
       };
       const res = await apiRequest("POST", "/api/spend-entries", payload);
       return res.json();
@@ -1082,7 +1088,7 @@ function AddSpendEntryDialog({
       queryClient.invalidateQueries({ queryKey: ["/api/projects"] });
       toast({ title: t('toast.spendAdded'), description: t('toast.spendAddedDesc') });
       setOpen(false);
-      form.reset({ amount: undefined as unknown as number, description: "", date: getTodayDateString(), categoryId: "", subcategoryId: null });
+      form.reset({ amount: undefined as unknown as number, description: "", date: getTodayDateString(), startDate: null, endDate: null, categoryId: "", subcategoryId: null });
       setSelectedCategoryId("");
       onSuccess();
     },
@@ -1155,6 +1161,34 @@ function AddSpendEntryDialog({
                 </FormItem>
               )}
             />
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="startDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('spend.startDate')}</FormLabel>
+                    <FormControl>
+                      <Input type="date" data-testid="input-spend-start-date" {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="endDate"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>{t('spend.endDate')}</FormLabel>
+                    <FormControl>
+                      <Input type="date" data-testid="input-spend-end-date" {...field} value={field.value || ""} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
             <FormField
               control={form.control}
               name="categoryId"
