@@ -118,7 +118,10 @@
     "recentSpendEntries": "Recent Spend Entries",
     "noSpendEntries": "No spend entries yet",
     "addFirstSpend": "Add your first spend entry to start tracking expenses.",
-    "deleteConfirm": "Are you sure you want to delete this spend entry?"
+    "deleteConfirm": "Are you sure you want to delete this spend entry?",
+    "startDate": "Campaign Start Date",
+    "endDate": "Campaign End Date",
+    "campaignPeriod": "Campaign"
   },
   "navigation": {
     "backToProjects": "Back to Projects"

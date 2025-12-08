@@ -1322,7 +1322,14 @@ function SpendEntriesList({ categories, projectId }: { categories: CategoryWithS
                     <span className="font-medium truncate">{entry.description}</span>
                     <Badge variant="outline" className="text-xs shrink-0">{getCategoryName(entry.categoryId)}</Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground">{formatDisplayDate(entry.date)}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {formatDisplayDate(entry.date)}
+                    {entry.startDate && entry.endDate && (
+                      <span className="ml-2">
+                        ({t('spend.campaignPeriod')}: {formatDisplayDate(entry.startDate)} - {formatDisplayDate(entry.endDate)})
+                      </span>
+                    )}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="font-semibold tabular-nums">{formatCurrency(entry.amount, i18n.language)}</span>

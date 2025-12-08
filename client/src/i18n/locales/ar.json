@@ -118,7 +118,10 @@
     "recentSpendEntries": "إدخالات الإنفاق الأخيرة",
     "noSpendEntries": "لا توجد إدخالات إنفاق بعد",
     "addFirstSpend": "أضف أول إدخال إنفاق لبدء تتبع المصروفات.",
-    "deleteConfirm": "هل أنت متأكد من حذف إدخال الإنفاق هذا؟"
+    "deleteConfirm": "هل أنت متأكد من حذف إدخال الإنفاق هذا؟",
+    "startDate": "تاريخ بدء الحملة",
+    "endDate": "تاريخ انتهاء الحملة",
+    "campaignPeriod": "الحملة"
   },
   "navigation": {
     "backToProjects": "العودة للمشاريع"
