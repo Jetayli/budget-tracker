@@ -1,5 +1,5 @@
-import { 
-  type Budget, 
+import {
+  type Budget,
   type InsertBudget,
   type Category,
   type InsertCategory,
@@ -9,75 +9,123 @@ import {
   type InsertSpendEntry,
   type CategoryWithSpent,
   type SubcategoryWithSpent,
+  type Task,
+  type InsertTask,
   budgets,
   categories,
   subcategories,
-  spendEntries
+  spendEntries,
+  tasks,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, sql, desc } from "drizzle-orm";
+import { eq, sql, desc, and } from "drizzle-orm";
 
 export interface IStorage {
-  getAllBudgets(): Promise<Budget[]>;
-  getBudget(id: string): Promise<Budget | undefined>;
-  createBudget(budget: InsertBudget): Promise<Budget>;
-  updateBudget(id: string, budget: InsertBudget): Promise<Budget | undefined>;
-  deleteBudget(id: string): Promise<boolean>;
-  
+  // Budget methods now require userId for multi-tenancy
+  getAllBudgets(userId: string): Promise<Budget[]>;
+  getBudget(id: string, userId: string): Promise<Budget | undefined>;
+  createBudget(budget: InsertBudget, userId: string): Promise<Budget>;
+  updateBudget(id: string, budget: InsertBudget, userId: string): Promise<Budget | undefined>;
+  deleteBudget(id: string, userId: string): Promise<boolean>;
+
+  // Category methods - validated through budget ownership
   getCategories(budgetId: string): Promise<CategoryWithSpent[]>;
   getCategory(id: string): Promise<Category | undefined>;
   createCategory(category: InsertCategory): Promise<Category>;
-  updateCategory(id: string, category: InsertCategory): Promise<Category | undefined>;
+  updateCategory(
+    id: string,
+    category: InsertCategory,
+  ): Promise<Category | undefined>;
   deleteCategory(id: string): Promise<boolean>;
-  
+
   getSubcategories(categoryId: string): Promise<SubcategoryWithSpent[]>;
   getSubcategory(id: string): Promise<Subcategory | undefined>;
   createSubcategory(subcategory: InsertSubcategory): Promise<Subcategory>;
-  updateSubcategory(id: string, subcategory: InsertSubcategory): Promise<Subcategory | undefined>;
+  updateSubcategory(
+    id: string,
+    subcategory: InsertSubcategory,
+  ): Promise<Subcategory | undefined>;
   deleteSubcategory(id: string): Promise<boolean>;
-  
+
   getSpendEntriesByBudget(budgetId: string): Promise<SpendEntry[]>;
-  getSpendEntries(categoryId?: string, subcategoryId?: string): Promise<SpendEntry[]>;
+  getSpendEntries(
+    categoryId?: string,
+    subcategoryId?: string,
+  ): Promise<SpendEntry[]>;
   getSpendEntry(id: string): Promise<SpendEntry | undefined>;
   createSpendEntry(entry: InsertSpendEntry): Promise<SpendEntry>;
-  updateSpendEntry(id: string, entry: InsertSpendEntry): Promise<SpendEntry | undefined>;
+  updateSpendEntry(
+    id: string,
+    entry: InsertSpendEntry,
+  ): Promise<SpendEntry | undefined>;
   deleteSpendEntry(id: string): Promise<boolean>;
-  
+
+  getTasks(projectId: string): Promise<Task[]>;
+  getTask(id: string): Promise<Task | undefined>;
+  createTask(task: InsertTask): Promise<Task>;
+  updateTask(id: string, task: InsertTask): Promise<Task | undefined>;
+  deleteTask(id: string): Promise<boolean>;
+
   getTotalSpent(budgetId: string): Promise<number>;
   getCategorySpent(categoryId: string): Promise<number>;
   getSubcategorySpent(subcategoryId: string): Promise<number>;
 }
 
 export class DatabaseStorage implements IStorage {
-  async getAllBudgets(): Promise<Budget[]> {
-    return db.select().from(budgets).orderBy(desc(budgets.createdAt));
+  async getAllBudgets(userId: string): Promise<Budget[]> {
+    return db
+      .select()
+      .from(budgets)
+      .where(eq(budgets.userId, userId))
+      .orderBy(desc(budgets.createdAt));
   }
 
-  async getBudget(id: string): Promise<Budget | undefined> {
-    const [budget] = await db.select().from(budgets).where(eq(budgets.id, id));
+  async getBudget(id: string, userId: string): Promise<Budget | undefined> {
+    const [budget] = await db
+      .select()
+      .from(budgets)
+      .where(and(eq(budgets.id, id), eq(budgets.userId, userId)));
     return budget || undefined;
   }
 
-  async createBudget(insertBudget: InsertBudget): Promise<Budget> {
-    const [budget] = await db.insert(budgets).values(insertBudget).returning();
+  async createBudget(insertBudget: InsertBudget, userId: string): Promise<Budget> {
+    const [budget] = await db
+      .insert(budgets)
+      .values({ ...insertBudget, userId })
+      .returning();
     return budget;
   }
 
-  async updateBudget(id: string, insertBudget: InsertBudget): Promise<Budget | undefined> {
+  async updateBudget(
+    id: string,
+    insertBudget: InsertBudget,
+    userId: string,
+  ): Promise<Budget | undefined> {
     const [budget] = await db
       .update(budgets)
       .set(insertBudget)
-      .where(eq(budgets.id, id))
+      .where(and(eq(budgets.id, id), eq(budgets.userId, userId)))
       .returning();
     return budget || undefined;
   }
 
-  async deleteBudget(id: string): Promise<boolean> {
-    const cats = await db.select({ id: categories.id }).from(categories).where(eq(categories.budgetId, id));
+  async deleteBudget(id: string, userId: string): Promise<boolean> {
+    // First verify the budget belongs to this user
+    const existingBudget = await this.getBudget(id, userId);
+    if (!existingBudget) {
+      return false;
+    }
+
+    const cats = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(eq(categories.budgetId, id));
     for (const cat of cats) {
       await this.deleteCategory(cat.id);
     }
-    const result = await db.delete(budgets).where(eq(budgets.id, id));
+    const result = await db
+      .delete(budgets)
+      .where(and(eq(budgets.id, id), eq(budgets.userId, userId)));
     return (result.rowCount ?? 0) > 0;
   }
 
@@ -86,7 +134,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(categories)
       .where(eq(categories.budgetId, budgetId));
-    
+
     const result: CategoryWithSpent[] = [];
     for (const cat of cats) {
       const spent = await this.getCategorySpent(cat.id);
@@ -111,7 +159,10 @@ export class DatabaseStorage implements IStorage {
     return category;
   }
 
-  async updateCategory(id: string, insertCategory: InsertCategory): Promise<Category | undefined> {
+  async updateCategory(
+    id: string,
+    insertCategory: InsertCategory,
+  ): Promise<Category | undefined> {
     const [category] = await db
       .update(categories)
       .set(insertCategory)
@@ -132,7 +183,7 @@ export class DatabaseStorage implements IStorage {
       .select()
       .from(subcategories)
       .where(eq(subcategories.categoryId, categoryId));
-    
+
     const result: SubcategoryWithSpent[] = [];
     for (const sub of subs) {
       const spent = await this.getSubcategorySpent(sub.id);
@@ -149,7 +200,9 @@ export class DatabaseStorage implements IStorage {
     return subcategory || undefined;
   }
 
-  async createSubcategory(insertSubcategory: InsertSubcategory): Promise<Subcategory> {
+  async createSubcategory(
+    insertSubcategory: InsertSubcategory,
+  ): Promise<Subcategory> {
     const [subcategory] = await db
       .insert(subcategories)
       .values(insertSubcategory)
@@ -157,7 +210,10 @@ export class DatabaseStorage implements IStorage {
     return subcategory;
   }
 
-  async updateSubcategory(id: string, insertSubcategory: InsertSubcategory): Promise<Subcategory | undefined> {
+  async updateSubcategory(
+    id: string,
+    insertSubcategory: InsertSubcategory,
+  ): Promise<Subcategory | undefined> {
     const [subcategory] = await db
       .update(subcategories)
       .set(insertSubcategory)
@@ -168,24 +224,32 @@ export class DatabaseStorage implements IStorage {
 
   async deleteSubcategory(id: string): Promise<boolean> {
     await db.delete(spendEntries).where(eq(spendEntries.subcategoryId, id));
-    const result = await db.delete(subcategories).where(eq(subcategories.id, id));
+    const result = await db
+      .delete(subcategories)
+      .where(eq(subcategories.id, id));
     return (result.rowCount ?? 0) > 0;
   }
 
   async getSpendEntriesByBudget(budgetId: string): Promise<SpendEntry[]> {
-    const cats = await db.select({ id: categories.id }).from(categories).where(eq(categories.budgetId, budgetId));
+    const cats = await db
+      .select({ id: categories.id })
+      .from(categories)
+      .where(eq(categories.budgetId, budgetId));
     if (cats.length === 0) return [];
-    
-    const categoryIds = cats.map(c => c.id);
+
+    const categoryIds = cats.map((c) => c.id);
     const entries = await db
       .select()
       .from(spendEntries)
       .orderBy(desc(spendEntries.date));
-    
-    return entries.filter(e => categoryIds.includes(e.categoryId));
+
+    return entries.filter((e) => categoryIds.includes(e.categoryId));
   }
 
-  async getSpendEntries(categoryId?: string, subcategoryId?: string): Promise<SpendEntry[]> {
+  async getSpendEntries(
+    categoryId?: string,
+    subcategoryId?: string,
+  ): Promise<SpendEntry[]> {
     if (subcategoryId) {
       return db
         .select()
@@ -219,7 +283,10 @@ export class DatabaseStorage implements IStorage {
     return entry;
   }
 
-  async updateSpendEntry(id: string, insertEntry: InsertSpendEntry): Promise<SpendEntry | undefined> {
+  async updateSpendEntry(
+    id: string,
+    insertEntry: InsertSpendEntry,
+  ): Promise<SpendEntry | undefined> {
     const [entry] = await db
       .update(spendEntries)
       .set(insertEntry)
@@ -233,12 +300,47 @@ export class DatabaseStorage implements IStorage {
     return (result.rowCount ?? 0) > 0;
   }
 
+  async getTasks(projectId: string): Promise<Task[]> {
+    return db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.projectId, projectId))
+      .orderBy(desc(tasks.createdAt));
+  }
+
+  async getTask(id: string): Promise<Task | undefined> {
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
+    return task || undefined;
+  }
+
+  async createTask(insertTask: InsertTask): Promise<Task> {
+    const [task] = await db.insert(tasks).values(insertTask).returning();
+    return task;
+  }
+
+  async updateTask(
+    id: string,
+    insertTask: InsertTask,
+  ): Promise<Task | undefined> {
+    const [task] = await db
+      .update(tasks)
+      .set({ ...insertTask, updatedAt: new Date() })
+      .where(eq(tasks.id, id))
+      .returning();
+    return task || undefined;
+  }
+
+  async deleteTask(id: string): Promise<boolean> {
+    const result = await db.delete(tasks).where(eq(tasks.id, id));
+    return (result.rowCount ?? 0) > 0;
+  }
+
   async getTotalSpent(budgetId: string): Promise<number> {
     const cats = await db
       .select({ id: categories.id })
       .from(categories)
       .where(eq(categories.budgetId, budgetId));
-    
+
     let total = 0;
     for (const cat of cats) {
       total += await this.getCategorySpent(cat.id);

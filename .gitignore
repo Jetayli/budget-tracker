@@ -1,6 +1,32 @@
+# Dependencies
 node_modules
+
+# Build output
 dist
-.DS_Store
 server/public
+
+# Environment variables (NEVER commit these!)
+.env
+.env.local
+.env.*.local
+
+# IDE and OS
+.DS_Store
+.vscode
+.idea
+*.swp
+*.swo
+
+# Vite
 vite.config.ts.*
+
+# Archives
 *.tar.gz
+*.zip
+
+# Local development
+.local/
+
+# Logs
+*.log
+npm-debug.log*

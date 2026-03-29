@@ -31,8 +31,15 @@ export async function setupVite(server: Server, app: Express) {
 
   app.use(vite.middlewares);
 
-  app.use("*", async (req, res, next) => {
+  // SPA fallback: serve index.html for all non-API routes
+  // This ensures client-side routing works on page refresh in development
+  app.get("*", async (req, res, next) => {
     const url = req.originalUrl;
+
+    // Don't serve index.html for API routes
+    if (url.startsWith("/api")) {
+      return res.status(404).json({ error: "API endpoint not found" });
+    }
 
     try {
       const clientTemplate = path.resolve(
