@@ -5,8 +5,8 @@ import {
   useState,
   ReactNode,
 } from "react";
-import { User, Session, AuthError } from "@supabase/supabase-js";
-import { supabase } from "@/lib/supabase";
+import { User, Session, AuthError, SupabaseClient } from "@supabase/supabase-js";
+import { initSupabase, getSupabase } from "@/lib/supabase";
 
 interface AuthContextType {
   user: User | null;
@@ -24,29 +24,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [supabase, setSupabaseClient] = useState<SupabaseClient | null>(null);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    // Initialize Supabase (may fetch config from server in production)
+    initSupabase().then((client) => {
+      setSupabaseClient(client);
 
-    // Listen for auth changes
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+      // Get initial session
+      client.auth.getSession().then(({ data: { session } }) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      });
 
-    return () => subscription.unsubscribe();
+      // Listen for auth changes
+      const {
+        data: { subscription },
+      } = client.auth.onAuthStateChange((_event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      });
+
+      return () => subscription.unsubscribe();
+    });
   }, []);
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
+    const client = supabase || getSupabase();
+    const { error } = await client.auth.signUp({
       email,
       password,
     });
@@ -54,7 +61,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const client = supabase || getSupabase();
+    const { error } = await client.auth.signInWithPassword({
       email,
       password,
     });
@@ -62,13 +70,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    const client = supabase || getSupabase();
+    await client.auth.signOut();
     setUser(null);
     setSession(null);
   };
 
   const getAccessToken = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
+    const client = supabase || getSupabase();
+    const { data: { session } } = await client.auth.getSession();
     return session?.access_token ?? null;
   };
 
@@ -81,6 +91,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signOut,
     getAccessToken,
   };
+
+  // Show loading state while initializing Supabase
+  if (!supabase && loading) {
+    return <div className="flex h-screen items-center justify-center">Loading...</div>;
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

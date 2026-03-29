@@ -30,7 +30,15 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express,
 ): Promise<Server> {
-  // Apply auth middleware to all /api routes
+  // Public config endpoint (no auth required) - provides frontend configuration
+  app.get("/api/config", (_req, res) => {
+    res.json({
+      supabaseUrl: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "",
+      supabaseAnonKey: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || "",
+    });
+  });
+
+  // Apply auth middleware to all other /api routes
   app.use("/api", authMiddleware);
 
   // Project (Budget) routes
